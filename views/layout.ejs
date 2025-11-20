@@ -27,31 +27,34 @@
         },
         extend: {
           colors: {
-            'primary': '#0055FF',
-            'secondary': '#0043CA',
-            'dark': {
-              '900': '#121212',
-              '800': '#252525',
-              '700': '#2D2D2D',
-              '600': '#3D3D3D',
-              '500': '#6E6E6E',
-              '400': '#8F8F8F',
-              '300': '#AFAFAF',
-              '200': '#CFCFCF',
-              '100': '#E5E5E5',
-            },
-            'gray': {
-              '900': '#121212',
-              '800': '#252525',
-              '700': '#2D2D2D',
-              '600': '#3D3D3D',
-              '500': '#6E6E6E',
-              '400': '#8F8F8F',
-              '300': '#AFAFAF',
-              '200': '#CFCFCF',
-              '100': '#E5E5E5',
-              '50': '#F5F5F5',
-            }
+            'primary': '#3C50E0',
+            'secondary': '#80CAEE',
+            'body': '#64748B',
+            'bodydark': '#AEB7C0',
+            'bodydark1': '#DEE4EE',
+            'bodydark2': '#8A99AF',
+            'stroke': '#E2E8F0',
+            'gray': '#EFF4FB',
+            'graydark': '#333A48',
+            'whiten': '#F1F5F9',
+            'whiter': '#F5F7FD',
+            'boxdark': '#24303F',
+            'boxdark-2': '#1A222C',
+            'strokedark': '#2E3A47',
+            'form-strokedark': '#3d4d60',
+            'form-input': '#1d2a39',
+            'meta-1': '#DC3545',
+            'meta-2': '#EFF2F7',
+            'meta-3': '#10B981',
+            'meta-4': '#313D4A',
+            'meta-5': '#259AE6',
+            'meta-6': '#FFBA00',
+            'meta-7': '#FF6766',
+            'meta-8': '#F0950C',
+            'meta-9': '#E5E7EB',
+            'success': '#219653',
+            'danger': '#D34053',
+            'warning': '#FFA70B',
           }
         }
       }
@@ -112,7 +115,7 @@
      }
    </script>
 </head>
-<body class="bg-dark-900 text-white font-inter">
+<body class="bg-white dark:bg-boxdark-2 font-inter">
   <div
     class="lg:hidden fixed top-0 left-0 right-0 h-16 bg-dark-800 shadow-lg flex items-center justify-between px-4 z-30">
     <div class="flex items-center">
@@ -131,120 +134,186 @@
       </div>
     </div>
   </div>
-  <div class="flex">
-    <div class="hidden lg:flex lg:fixed lg:flex-col w-20 h-screen pt-2 bg-dark-800 shadow-lg overflow-hidden">
-      <div class="flex items-center justify-center h-14 w-14 mx-auto mb-4">
-        <img src="/images/logo.svg" alt="StreamFlow Logo" class="w-9 h-9">
+  <div class="flex h-screen overflow-hidden">
+    <!-- Sidebar -->
+    <aside class="hidden lg:flex lg:fixed lg:flex-col w-64 h-screen bg-boxdark z-50 shadow-lg overflow-y-auto">
+      <!-- Sidebar Header -->
+      <div class="flex items-center justify-between gap-2 px-6 py-5.5 lg:py-6.5">
+        <a href="/dashboard" class="flex items-center gap-2">
+          <img src="/images/logo.svg" alt="StreamFlow Logo" class="w-8 h-8">
+          <span class="text-xl font-semibold text-white">StreamFlow</span>
+        </a>
       </div>
-      <div class="flex-1">
-        <a href="/dashboard" class="sidebar-icon group <%= active === 'dashboard' ? 'bg-primary' : '' %>">
-          <i class="ti ti-broadcast text-xl"></i>
-          <span class="text-xs mt-1">Streams</span>
-          <span class="sidebar-tooltip group-hover:scale-100">Stream Manager</span>
-        </a>
-        <a href="/gallery" class="sidebar-icon group <%= active === 'gallery' ? 'bg-primary' : '' %>">
-          <i class="ti ti-video text-xl"></i>
-          <span class="text-xs mt-1">Gallery</span>
-          <span class="sidebar-tooltip group-hover:scale-100">Video Gallery</span>
-        </a>
-        <a href="/playlist" class="sidebar-icon group <%= active === 'playlist' ? 'bg-primary' : '' %>">
-          <i class="ti ti-playlist text-xl"></i>
-          <span class="text-xs mt-1">Playlist</span>
-          <span class="sidebar-tooltip group-hover:scale-100">Playlist Manager</span>
-        </a>
-        <a href="/history" class="sidebar-icon group <%= active === 'history' ? 'bg-primary' : '' %>">
-          <i class="ti ti-history text-xl"></i>
-          <span class="text-xs mt-1">History</span>
-          <span class="sidebar-tooltip group-hover:scale-100">Stream History</span>
-        </a>
-        <% if (req.session && req.session.user_role === 'admin') { %>
-        <a href="/users" class="sidebar-icon group <%= active === 'users' ? 'bg-primary' : '' %>">
-          <i class="ti ti-users text-xl"></i>
-          <span class="text-xs mt-1">Users</span>
-          <span class="sidebar-tooltip group-hover:scale-100">User Management</span>
-        </a>
-        <% } %>
-      </div>
-      <div class="mt-auto">
-        <div class="h-px bg-gray-700 w-full"></div>
-        <div class="relative" id="profile-menu-container">
-          <div class="h-20 flex items-center justify-center px-3 py-4 hover:bg-dark-700/50 transition-colors">
-            <button id="profile-menu-button"
-              class="w-12 h-12 rounded-full flex items-center justify-center overflow-hidden ring-2 ring-gray-700 hover:ring-primary transition-all">
-              <%- helpers.getAvatar(req) %>
-            </button>
+      
+      <!-- Sidebar Menu -->
+      <div class="flex flex-col overflow-y-auto duration-300 ease-linear">
+        <nav class="mt-5 py-4 px-4 lg:mt-9 lg:px-6">
+          <!-- Menu Group -->
+          <div>
+            <h3 class="mb-4 ml-4 text-sm font-semibold text-bodydark2">MENU</h3>
+            
+            <ul class="mb-6 flex flex-col gap-1.5">
+              <li>
+                <a href="/dashboard" class="group relative flex items-center gap-2.5 rounded-sm py-2 px-4 font-medium text-bodydark1 duration-300 ease-in-out hover:bg-graydark <%= active === 'dashboard' ? 'bg-graydark' : '' %>">
+                  <i class="ti ti-broadcast text-lg"></i>
+                  Streams
+                </a>
+              </li>
+              <li>
+                <a href="/gallery" class="group relative flex items-center gap-2.5 rounded-sm py-2 px-4 font-medium text-bodydark1 duration-300 ease-in-out hover:bg-graydark <%= active === 'gallery' ? 'bg-graydark' : '' %>">
+                  <i class="ti ti-video text-lg"></i>
+                  Gallery
+                </a>
+              </li>
+              <li>
+                <a href="/playlist" class="group relative flex items-center gap-2.5 rounded-sm py-2 px-4 font-medium text-bodydark1 duration-300 ease-in-out hover:bg-graydark <%= active === 'playlist' ? 'bg-graydark' : '' %>">
+                  <i class="ti ti-playlist text-lg"></i>
+                  Playlist
+                </a>
+              </li>
+              <li>
+                <a href="/history" class="group relative flex items-center gap-2.5 rounded-sm py-2 px-4 font-medium text-bodydark1 duration-300 ease-in-out hover:bg-graydark <%= active === 'history' ? 'bg-graydark' : '' %>">
+                  <i class="ti ti-history text-lg"></i>
+                  History
+                </a>
+              </li>
+              <li>
+                <a href="/channels" class="group relative flex items-center gap-2.5 rounded-sm py-2 px-4 font-medium text-bodydark1 duration-300 ease-in-out hover:bg-graydark <%= active === 'channels' ? 'bg-graydark' : '' %>">
+                  <i class="ti ti-broadcast text-lg"></i>
+                  Channels
+                </a>
+              </li>
+              <% if (req.session && req.session.user_role === 'admin') { %>
+              <li>
+                <a href="/users" class="group relative flex items-center gap-2.5 rounded-sm py-2 px-4 font-medium text-bodydark1 duration-300 ease-in-out hover:bg-graydark <%= active === 'users' ? 'bg-graydark' : '' %>">
+                  <i class="ti ti-users text-lg"></i>
+                  Users
+                </a>
+              </li>
+              <% } %>
+            </ul>
           </div>
+          
+          <!-- Others Group -->
+          <div>
+            <h3 class="mb-4 ml-4 text-sm font-semibold text-bodydark2">OTHERS</h3>
+            
+            <ul class="mb-6 flex flex-col gap-1.5">
+              <li>
+                <a href="/settings" class="group relative flex items-center gap-2.5 rounded-sm py-2 px-4 font-medium text-bodydark1 duration-300 ease-in-out hover:bg-graydark <%= active === 'settings' ? 'bg-graydark' : '' %>">
+                  <i class="ti ti-settings text-lg"></i>
+                  Settings
+                </a>
+              </li>
+              <li>
+                <a href="https://github.com/bangtutorial/streamflow/issues" target="_blank" class="group relative flex items-center gap-2.5 rounded-sm py-2 px-4 font-medium text-bodydark1 duration-300 ease-in-out hover:bg-graydark">
+                  <i class="ti ti-help text-lg"></i>
+                  Help & Support
+                </a>
+              </li>
+            </ul>
+          </div>
+        </nav>
+      </div>
+      
+      <!-- Profile Section -->
+      <div class="mt-auto border-t border-strokedark">
+        <div class="relative" id="profile-menu-container">
+          <button id="profile-menu-button" class="flex items-center gap-3 px-6 py-4 hover:bg-graydark w-full">
+            <div class="w-10 h-10 rounded-full overflow-hidden flex-shrink-0">
+              <%- helpers.getAvatar(req) %>
+            </div>
+            <div class="flex-1 text-left">
+              <p class="text-sm font-medium text-white"><%= helpers.getUsername(req) %></p>
+              <p class="text-xs text-bodydark2">View Profile</p>
+            </div>
+          </button>
         </div>
       </div>
-    </div>
-    <div id="profile-dropdown" class="fixed bg-dark-800 shadow-xl border border-gray-700 hidden">
-      <div class="px-4 py-2 border-b border-gray-700">
-        <div class="font-medium">
+    </aside>
+    <div id="profile-dropdown" class="fixed bg-white dark:bg-boxdark shadow-xl border border-stroke dark:border-strokedark rounded-lg hidden">
+      <div class="px-4 py-3 border-b border-stroke dark:border-strokedark">
+        <p class="text-sm font-medium text-black dark:text-white">
           <%= helpers.getUsername(req) %>
-        </div>
+        </p>
+        <p class="text-xs text-bodydark"><%= req.session.email || '' %></p>
       </div>
       <a href="/settings"
-        class="flex items-center px-4 py-2.5 text-sm text-gray-300 hover:bg-dark-700 hover:text-white transition-colors">
-        <i class="ti ti-settings mr-3"></i>
+        class="flex items-center gap-3 px-4 py-2.5 text-sm text-bodydark hover:bg-gray-2 dark:hover:bg-meta-4 hover:text-black dark:hover:text-white transition-colors">
+        <i class="ti ti-settings text-lg"></i>
         <span>Settings</span>
       </a>
       <a href="https://github.com/bangtutorial/streamflow/issues"
-        class="flex items-center px-4 py-2.5 text-sm text-gray-300 hover:bg-dark-700 hover:text-white transition-colors" target="_blank">
-        <i class="ti ti-help mr-3"></i>
+        class="flex items-center gap-3 px-4 py-2.5 text-sm text-bodydark hover:bg-gray-2 dark:hover:bg-meta-4 hover:text-black dark:hover:text-white transition-colors" target="_blank">
+        <i class="ti ti-help text-lg"></i>
         <span>Help & Support</span>
       </a>
-      <div class="h-px bg-gray-700 mx-4"></div>
-      <a href="/logout" class="flex items-center px-4 py-2.5 text-sm text-logout hover:bg-dark-700 transition-colors">
-        <i class="ti ti-logout mr-3"></i>
+      <div class="h-px bg-stroke dark:bg-strokedark my-2"></div>
+      <a href="/logout" class="flex items-center gap-3 px-4 py-2.5 text-sm text-meta-1 hover:bg-gray-2 dark:hover:bg-meta-4 transition-colors">
+        <i class="ti ti-logout text-lg"></i>
         <span>Sign Out</span>
       </a>
     </div>
-    <div class="w-full lg:ml-20 flex flex-col min-h-screen">
-      <div
-        class="hidden lg:fixed lg:flex top-0 right-0 left-20 items-center justify-end h-14 px-6 bg-dark-800 shadow-md z-10">
-        <a href="https://github.com/bangtutorial/streamflow" target="_blank"
-          class="p-2 text-gray-400 hover:text-white transition-colors mr-2">
-          <i class="ti ti-brand-github text-lg"></i>
-        </a>
-        <div class="relative">
-          <button id="notification-btn" class="p-2 text-gray-400 hover:text-white transition-colors relative">
-            <i class="ti ti-bell text-lg"></i>
-            <span class="hidden absolute top-0.5 right-0.5 w-2 h-2 bg-red-500 rounded-full"></span>
-          </button>
-          <div id="notification-dropdown"
-            class="hidden absolute right-0 mt-1 w-80 bg-dark-800 border border-gray-700 rounded-lg shadow-xl z-[60]">
-            <div class="p-3 border-b border-gray-700 flex items-center justify-between">
-              <h3 class="font-medium">Notifications</h3>
-            </div>
-            <div class="max-h-80 overflow-y-auto" id="notification-list">
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="p-6 pt-20 lg:pt-22 flex-1">
-        <%- body %>
-      </div>
-      <div class="hidden lg:flex justify-end pr-6 py-4">
-        <div class="flex items-center gap-2">
-          <div class="text-xs text-gray-500">
-            StreamFlow <span class="text-xs font-medium bg-gray-700 px-1 rounded">v2.1</span>
-          </div>
-          <div class="h-3 w-px bg-gray-700"></div>
-          <a href="https://youtube.com/@bangtutorial" target="_blank" class="text-xs text-gray-500 hover:underline">by
-            Bang Tutorial</a>
-          <a href="https://donate.youtube101.id/" target="_blank" class="kirim-tip-button relative ml-1">
-            <span class="relative z-10 flex items-center gap-1 text-white font-medium px-1.5 py-0.5 text-xs">
-              <i class="ti ti-heart text-white"></i>
-              <span>Donate</span>
+    <!-- Main Content -->
+    <div class="relative flex flex-1 flex-col overflow-y-auto overflow-x-hidden lg:ml-64">
+      <!-- Header -->
+      <header class="sticky top-0 z-40 flex w-full bg-white drop-shadow-1 dark:bg-boxdark dark:drop-shadow-none">
+        <div class="flex flex-grow items-center justify-between px-4 py-4 shadow-2 md:px-6 2xl:px-11">
+          <div class="flex items-center gap-3">
+            <span class="hidden text-right lg:block">
+              <span class="block text-sm font-medium text-black dark:text-white"><%= helpers.getUsername(req) %></span>
+              <span class="block text-xs"><%= req.session.user_role || 'User' %></span>
             </span>
-            <div
-              class="kirim-tip-tooltip px-3 py-2 bg-white text-gray-800 text-xs rounded-lg shadow-lg whitespace-nowrap">
-              Terima kasih sudah bantu support 🙏
-              <div class="tooltip-arrow"></div>
+            
+            <div class="flex items-center gap-2">
+              <a href="https://github.com/bangtutorial/streamflow" target="_blank"
+                class="p-2 text-bodydark hover:text-primary transition-colors">
+                <i class="ti ti-brand-github text-xl"></i>
+              </a>
+              
+              <div class="relative">
+                <button id="notification-btn" class="p-2 text-bodydark hover:text-primary transition-colors relative">
+                  <i class="ti ti-bell text-xl"></i>
+                  <span class="hidden absolute top-0.5 right-0.5 w-2 h-2 bg-meta-1 rounded-full"></span>
+                </button>
+                <div id="notification-dropdown"
+                  class="hidden absolute right-0 mt-2 w-80 bg-white dark:bg-boxdark border border-stroke dark:border-strokedark rounded-lg shadow-xl z-[60]">
+                  <div class="p-4 border-b border-stroke dark:border-strokedark flex items-center justify-between">
+                    <h3 class="font-semibold text-black dark:text-white">Notifications</h3>
+                  </div>
+                  <div class="max-h-80 overflow-y-auto" id="notification-list">
+                  </div>
+                </div>
+              </div>
             </div>
-          </a>
+          </div>
         </div>
-      </div>
+      </header>
+      
+      <!-- Main Content Area -->
+      <main class="mx-auto max-w-screen-2xl p-4 md:p-6 2xl:p-10">
+        <%- body %>
+      </main>
+      
+      <!-- Footer -->
+      <footer class="mt-auto border-t border-stroke dark:border-strokedark">
+        <div class="flex flex-col gap-2 py-4 px-4 md:px-6 2xl:px-11 md:flex-row md:items-center md:justify-between">
+          <div class="flex items-center gap-2 text-sm text-bodydark">
+            <span>StreamFlow <span class="font-medium text-primary">v2.1</span></span>
+            <span class="text-bodydark2">•</span>
+            <a href="https://youtube.com/@bangtutorial" target="_blank" class="hover:text-primary transition-colors">
+              by Bang Tutorial
+            </a>
+          </div>
+          <div class="flex items-center gap-2">
+            <a href="https://donate.youtube101.id/" target="_blank" 
+               class="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-opacity-90 transition-all">
+              <i class="ti ti-heart"></i>
+              <span>Donate</span>
+            </a>
+          </div>
+        </div>
+      </footer>
     </div>
   </div>
   <div class="lg:hidden fixed bottom-0 left-0 right-0 bg-dark-800 border-t border-gray-700 shadow-lg z-30">
@@ -264,6 +333,10 @@
       <a href="/history" class="bottom-nav-item <%= active === 'history' ? 'bottom-nav-active' : '' %>">
         <i class="ti ti-history"></i>
         <span>History</span>
+      </a>
+      <a href="/channels" class="bottom-nav-item <%= active === 'channels' ? 'bottom-nav-active' : '' %>">
+        <i class="ti ti-broadcast"></i>
+        <span>Channels</span>
       </a>
       <button id="mobile-profile-btn" class="bottom-nav-item">
         <div class="relative">

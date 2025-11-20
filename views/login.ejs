@@ -3,10 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Login - StreamFlow Lite</title>
-  <link rel="icon" href="/images/logo_mobile.svg" type="image/svg+xml">
-  <link rel="preload" href="/images/logo_mobile.svg" as="image" type="image/svg+xml">
-  <link rel="alternate icon" href="/images/favicon.ico" type="image/x-icon">
+  <title>Login - StreamFlow</title>
+  <link rel="icon" href="/images/logo.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -23,83 +21,146 @@
         },
         extend: {
           colors: {
-            'primary': '#0055FF',
-            'secondary': '#0043CA',
-            'dark': {
-              '900': '#121212',
-              '800': '#252525',
-              '700': '#2D2D2D',
-              '600': '#3D3D3D',
-              '500': '#6E6E6E',
-              '400': '#8F8F8F',
-              '100': '#E5E5E5',
-            }
+            'primary': '#3C50E0',
+            'secondary': '#80CAEE',
+            'body': '#64748B',
+            'bodydark': '#AEB7C0',
+            'bodydark1': '#DEE4EE',
+            'bodydark2': '#8A99AF',
+            'stroke': '#E2E8F0',
+            'gray': '#EFF4FB',
+            'graydark': '#333A48',
+            'whiten': '#F1F5F9',
+            'whiter': '#F5F7FD',
+            'boxdark': '#24303F',
+            'boxdark-2': '#1A222C',
+            'strokedark': '#2E3A47',
+            'success': '#219653',
+            'danger': '#D34053',
+            'warning': '#FFA70B',
           }
         }
       }
     }
   </script>
 </head>
-<body class="bg-dark-900 text-white font-inter">
-  <div class="min-h-screen flex items-center justify-center px-6">
-    <div class="w-full max-w-md bg-dark-800 rounded-xl shadow-xl p-8">
-      
-      <div class="flex justify-center mb-8">
-        <img src="/images/logo_mobile.svg" alt="StreamFlow Logo" class="h-10">
-      </div>
-      
-      <% if (error) { %>
-        <div id="error-message" class="bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-3 rounded-lg mb-6">
-          <div class="flex items-center">
-            <i class="ti ti-alert-circle mr-2"></i>
-            <span>
-              <%= error %>
-            </span>
-          </div>
-          <% if (error.includes('Too many login attempts')) { %>
-            <% } %>
+<body class="bg-whiten dark:bg-boxdark-2">
+  <div class="min-h-screen flex">
+    <!-- Left Side - Decorative -->
+    <div class="hidden lg:flex lg:w-1/2 bg-primary relative overflow-hidden">
+      <div class="absolute inset-0 bg-gradient-to-br from-primary to-secondary opacity-90"></div>
+      <div class="relative z-10 flex flex-col justify-center items-center text-white p-12">
+        <div class="mb-8">
+          <img src="/images/logo.svg" alt="StreamFlow Logo" class="h-16 w-16 mb-6 mx-auto">
+          <h1 class="text-4xl font-bold mb-4">StreamFlow</h1>
+          <p class="text-xl text-white/90">Professional Live Streaming Platform</p>
         </div>
-        <% } %>
-          
-          <form action="/login" method="post" class="space-y-5">
-            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-            <div>
-              <label for="username" class="text-sm font-medium block mb-2">Username</label>
-              <div class="relative">
-                <input type="text" id="username" name="username"
-                  class="w-full pl-10 pr-4 py-2.5 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary"
-                  placeholder="Enter your username" required>
-                <i class="ti ti-user absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
-              </div>
-            </div>
-            <div class="pb-3">
-              <label for="password" class="text-sm font-medium block mb-2">Password</label>
-              <div class="relative">
-                <input type="password" id="password" name="password"
-                  class="w-full pl-10 pr-12 py-2.5 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary"
-                  placeholder="Enter your password" required>
-                <i class="ti ti-lock absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
-                <button type="button" onclick="togglePasswordVisibility()"
-                  class="absolute right-3 top-1/2 -translate-y-1/2 flex items-center justify-center text-gray-400 hover:text-white transition-colors">
-                  <i class="ti ti-eye text-base" id="passwordToggle"></i>
-                </button>
-              </div>
-            </div>
-            
-            <button type="submit"
-              class="w-full bg-primary hover:bg-blue-600 text-white py-2.5 rounded-lg font-medium transition-colors">
-              Log In
-            </button>
-          </form>
+        <div class="mt-12 text-center max-w-md">
+          <p class="text-lg text-white/80">
+            Manage your live streams effortlessly with our powerful and intuitive platform.
+          </p>
+        </div>
+      </div>
+      <!-- Decorative circles -->
+      <div class="absolute top-20 right-20 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
+      <div class="absolute bottom-20 left-20 w-80 h-80 bg-white/10 rounded-full blur-3xl"></div>
+    </div>
 
-          <div class="text-center mt-6">
-            <p class="text-gray-400 text-sm">
-              Don't have an account? 
-              <a href="/signup" class="text-primary hover:text-blue-400 transition-colors">Sign up</a>
-            </p>
+    <!-- Right Side - Login Form -->
+    <div class="w-full lg:w-1/2 flex items-center justify-center p-6">
+      <div class="w-full max-w-md">
+        <!-- Logo for mobile -->
+        <div class="lg:hidden flex justify-center mb-8">
+          <img src="/images/logo.svg" alt="StreamFlow Logo" class="h-12">
+        </div>
+
+        <!-- Login Card -->
+        <div class="rounded-sm border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark" style="padding: 5%;">
+          <div class="border-b border-stroke py-4 px-6.5 dark:border-strokedark">
+            <h3 class="font-semibold text-2xl text-black dark:text-white">
+              Sign In
+            </h3>
+            <p class="text-sm text-bodydark mt-1">Enter your credentials to access your account</p>
           </div>
+
+          <div class="p-6.5">
+            <% if (error) { %>
+            <div class="mb-6 flex w-full border-l-6 border-danger bg-danger bg-opacity-10 px-7 py-4 shadow-md dark:bg-opacity-20">
+              <div class="mr-5 flex h-9 w-9 items-center justify-center rounded-lg bg-danger">
+                <i class="ti ti-alert-circle text-white text-xl"></i>
+              </div>
+              <div class="w-full">
+                <h5 class="mb-1 text-base font-semibold text-danger">
+                  Authentication Error
+                </h5>
+                <p class="text-sm leading-relaxed text-bodydark">
+                  <%= error %>
+                </p>
+              </div>
+            </div>
+            <% } %>
+
+            <form action="/login" method="post" class="space-y-5.5">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+              
+              <div>
+                <label class="mb-2.5 block font-medium text-black dark:text-white">
+                  Username
+                </label>
+                <div class="relative">
+                  <input type="text" id="username" name="username" required
+                    placeholder="Enter your username"
+                    class="w-full rounded-lg border border-stroke bg-transparent py-3 pl-12 pr-4 text-black outline-none focus:border-primary focus-visible:shadow-none dark:border-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary" />
+                  <span class="absolute left-4 top-1/2 -translate-y-1/2">
+                    <i class="ti ti-user text-xl text-bodydark"></i>
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label class="mb-2.5 block font-medium text-black dark:text-white">
+                  Password
+                </label>
+                <div class="relative">
+                  <input type="password" id="password" name="password" required
+                    placeholder="Enter your password"
+                    class="w-full rounded-lg border border-stroke bg-transparent py-3 pl-12 pr-12 text-black outline-none focus:border-primary focus-visible:shadow-none dark:border-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary" />
+                  <span class="absolute left-4 top-1/2 -translate-y-1/2">
+                    <i class="ti ti-lock text-xl text-bodydark"></i>
+                  </span>
+                  <button type="button" onclick="togglePasswordVisibility()"
+                    class="absolute right-4 top-1/2 -translate-y-1/2 text-bodydark hover:text-primary transition-colors">
+                    <i class="ti ti-eye text-xl" id="passwordToggle"></i>
+                  </button>
+                </div>
+              </div>
+
+              <button type="submit"
+                class="flex w-full justify-center rounded-lg bg-primary p-3 font-medium text-white hover:bg-opacity-90 transition-all">
+                Sign In
+              </button>
+            </form>
+
+            <div class="mt-6 text-center">
+              <p class="text-sm text-bodydark">
+                Don't have an account?
+                <a href="/signup" class="text-primary hover:underline">Sign up</a>
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="mt-6 text-center">
+          <p class="text-sm text-bodydark">
+            © 2025 StreamFlow. Created by
+            <a href="https://youtube.com/@bangtutorial" target="_blank" class="text-primary hover:underline">Bang Tutorial</a>
+          </p>
+        </div>
+      </div>
     </div>
   </div>
+
   <script>
     document.addEventListener('DOMContentLoaded', function() {
       const icons = document.querySelectorAll('.ti');

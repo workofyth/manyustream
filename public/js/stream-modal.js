@@ -76,12 +76,12 @@ function selectVideo(video) {
   const videoSelector = document.querySelector('[onclick="toggleVideoSelector()"]');
   videoSelector.classList.remove('border-red-500');
   videoSelector.classList.add('border-gray-600');
-  
+
   const desktopPreview = document.getElementById('videoPreview');
   const desktopEmptyPreview = document.getElementById('emptyPreview');
   const mobilePreview = document.getElementById('videoPreviewMobile');
   const mobileEmptyPreview = document.getElementById('emptyPreviewMobile');
-  
+
   if (desktopVideoPlayer) {
     desktopVideoPlayer.pause();
     desktopVideoPlayer.dispose();
@@ -92,16 +92,16 @@ function selectVideo(video) {
     mobileVideoPlayer.dispose();
     mobileVideoPlayer = null;
   }
-  
+
   if (video.type === 'playlist') {
     desktopPreview.classList.add('hidden');
     mobilePreview.classList.add('hidden');
     desktopEmptyPreview.classList.remove('hidden');
     mobileEmptyPreview.classList.remove('hidden');
-    
+
     const desktopEmptyContent = desktopEmptyPreview.querySelector('div');
     const mobileEmptyContent = mobileEmptyPreview.querySelector('div');
-    
+
     if (desktopEmptyContent) {
       desktopEmptyContent.innerHTML = `
         <i class="ti ti-playlist text-4xl text-blue-400 mb-2"></i>
@@ -109,7 +109,7 @@ function selectVideo(video) {
         <p class="text-xs text-blue-300 mt-1">Playlist selected • ${video.duration || 'Unknown duration'}</p>
       `;
     }
-    
+
     if (mobileEmptyContent) {
       mobileEmptyContent.innerHTML = `
         <i class="ti ti-playlist text-4xl text-blue-400 mb-2"></i>
@@ -122,10 +122,10 @@ function selectVideo(video) {
     mobilePreview.classList.remove('hidden');
     desktopEmptyPreview.classList.add('hidden');
     mobileEmptyPreview.classList.add('hidden');
-    
+
     const desktopVideoContainer = document.getElementById('videoPreview');
     const mobileVideoContainer = document.getElementById('videoPreviewMobile');
-    
+
     desktopVideoContainer.innerHTML = `
       <video id="videojs-preview-desktop" class="video-js vjs-default-skin vjs-big-play-centered" controls preload="auto">
         <source src="${video.url}" type="video/mp4">
@@ -136,23 +136,42 @@ function selectVideo(video) {
         <source src="${video.url}" type="video/mp4">
       </video>
     `;
-    
+
     setTimeout(() => {
-      desktopVideoPlayer = videojs('videojs-preview-desktop', {
-        controls: true,
-        autoplay: false,
-        preload: 'auto',
-        fluid: true
-      });
-      mobileVideoPlayer = videojs('videojs-preview-mobile', {
-        controls: true,
-        autoplay: false,
-        preload: 'auto',
-        fluid: true
-      });
+      try {
+        desktopVideoPlayer = videojs('videojs-preview-desktop', {
+          controls: true,
+          autoplay: false,
+          preload: 'auto',
+          fluid: true
+        });
+        
+        // Handle video errors
+        desktopVideoPlayer.on('error', function() {
+          console.error('Desktop video player error:', desktopVideoPlayer.error());
+        });
+      } catch (err) {
+        console.error('Error initializing desktop video player:', err);
+      }
+      
+      try {
+        mobileVideoPlayer = videojs('videojs-preview-mobile', {
+          controls: true,
+          autoplay: false,
+          preload: 'auto',
+          fluid: true
+        });
+        
+        // Handle video errors
+        mobileVideoPlayer.on('error', function() {
+          console.error('Mobile video player error:', mobileVideoPlayer.error());
+        });
+      } catch (err) {
+        console.error('Error initializing mobile video player:', err);
+      }
     }, 10);
   }
-  
+
   document.getElementById('videoSelectorDropdown').classList.add('hidden');
   const hiddenVideoInput = document.getElementById('selectedVideoId');
   if (hiddenVideoInput) {
@@ -220,12 +239,12 @@ function displayFilteredVideos(videos) {
       button.type = 'button';
       button.className = 'w-full flex items-start space-x-3 p-2 rounded hover:bg-dark-600 transition-colors text-left';
       button.onclick = () => selectVideo(item);
-      
+
       if (item.type === 'playlist') {
         button.innerHTML = `
           <div class="w-16 h-12 bg-gradient-to-br from-blue-600 to-purple-600 rounded flex-shrink-0 overflow-hidden relative">
-            <img src="${item.thumbnail}" alt="" 
-              class="w-full h-full object-cover rounded" 
+            <img src="${item.thumbnail}" alt=""
+              class="w-full h-full object-cover rounded"
               onerror="this.src='/images/playlist-thumbnail.svg'">
             <div class="absolute top-0 right-0 bg-green-500 text-white text-xs px-1 rounded-bl text-[8px] font-bold">PL</div>
           </div>
@@ -240,8 +259,8 @@ function displayFilteredVideos(videos) {
       } else {
         button.innerHTML = `
           <div class="w-16 h-12 bg-dark-800 rounded flex-shrink-0 overflow-hidden">
-            <img src="${item.thumbnail || '/images/default-thumbnail.jpg'}" alt="" 
-              class="w-full h-full object-cover rounded" 
+            <img src="${item.thumbnail || '/images/default-thumbnail.jpg'}" alt=""
+              class="w-full h-full object-cover rounded"
               onerror="this.src='/images/default-thumbnail.jpg'">
           </div>
           <div class="flex-1 min-w-0 ml-3 text-left">
@@ -275,24 +294,24 @@ function resetModalForm() {
   mobilePreview.classList.add('hidden');
   desktopEmptyPreview.classList.remove('hidden');
   mobileEmptyPreview.classList.remove('hidden');
-  
+
   const desktopEmptyContent = desktopEmptyPreview.querySelector('div');
   const mobileEmptyContent = mobileEmptyPreview.querySelector('div');
-  
+
   if (desktopEmptyContent) {
     desktopEmptyContent.innerHTML = `
       <i class="ti ti-video text-4xl text-gray-600 mb-2"></i>
       <p class="text-sm text-gray-500">Select a video to preview</p>
     `;
   }
-  
+
   if (mobileEmptyContent) {
     mobileEmptyContent.innerHTML = `
       <i class="ti ti-video text-4xl text-gray-600 mb-2"></i>
       <p class="text-sm text-gray-500">Select a video to preview</p>
     `;
   }
-  
+
   if (isDropdownOpen) {
     toggleVideoSelector();
   }
@@ -300,13 +319,13 @@ function resetModalForm() {
 function initModal() {
   const modal = document.getElementById('newStreamModal');
   if (!modal) return;
-  
+
   modal.addEventListener('click', (e) => {
     if (e.target === modal) {
       closeNewStreamModal();
     }
   });
-  
+
   if (videoSelectorDropdown) {
     document.addEventListener('click', (e) => {
       const isClickInsideDropdown = videoSelectorDropdown.contains(e.target);
@@ -316,7 +335,7 @@ function initModal() {
       }
     });
   }
-  
+
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       if (isDropdownOpen) {
@@ -443,7 +462,7 @@ document.addEventListener('DOMContentLoaded', function () {
       } else {
         currentPlatform = 'Custom';
       }
-      if (streamKeyInput.value) {
+      if (streamKeyInput && streamKeyInput.value) {
         validateStreamKeyForPlatform(streamKeyInput.value, currentPlatform);
       }
     });
@@ -493,4 +512,263 @@ function validateStreamKeyForPlatform(streamKey, platform) {
       console.error('Error validating stream key:', error);
     });
 }
-document.addEventListener('DOMContentLoaded', initModal);
+// Function to populate channel dropdowns
+async function populateChannels() {
+  try {
+    const response = await fetch('/api/channels');
+    const data = await response.json();
+
+    if (!data.success) {
+      console.error('Failed to load channels:', data.error);
+      return;
+    }
+
+    const channels = data.channels;
+    const createChannelSelect = document.getElementById('channelSelect');
+    const editChannelSelect = document.getElementById('editChannelSelect');
+
+    // Clear existing options (except the default one)
+    if (createChannelSelect) {
+      // Remove all options except the first one (default)
+      while (createChannelSelect.options.length > 1) {
+        createChannelSelect.remove(1);
+      }
+
+      channels.forEach(channel => {
+        const option = document.createElement('option');
+        option.value = channel.id;
+        option.textContent = `${channel.name} (${channel.platform})`;
+        createChannelSelect.appendChild(option);
+      });
+    }
+
+    if (editChannelSelect) {
+      // Remove all options except the first one (default)
+      while (editChannelSelect.options.length > 1) {
+        editChannelSelect.remove(1);
+      }
+
+      channels.forEach(channel => {
+        const option = document.createElement('option');
+        option.value = channel.id;
+        option.textContent = `${channel.name} (${channel.platform})`;
+        editChannelSelect.appendChild(option);
+      });
+    }
+  } catch (error) {
+    console.error('Error loading channels:', error);
+  }
+}
+
+// Function to get channel details by ID
+async function getChannelDetails(channelId) {
+  try {
+    const response = await fetch(`/api/channels/${channelId}`);
+    const data = await response.json();
+
+    if (data.success) {
+      return data.channel;
+    } else {
+      console.error('Failed to get channel details:', data.error);
+      return null;
+    }
+  } catch (error) {
+    console.error('Error getting channel details:', error);
+    return null;
+  }
+}
+
+// Function to find a channel by RTMP URL and Stream Key
+async function findChannelByDetails(rtmpUrl, streamKey) {
+  try {
+    const response = await fetch('/api/channels');
+    const data = await response.json();
+
+    if (!data.success) {
+      console.error('Failed to load channels:', data.error);
+      return null;
+    }
+
+    const channels = data.channels;
+    const matchingChannel = channels.find(channel =>
+      channel.rtmp_url === rtmpUrl && channel.stream_key === streamKey
+    );
+
+    return matchingChannel || null;
+  } catch (error) {
+    console.error('Error finding channel by details:', error);
+    return null;
+  }
+}
+
+// Function to refresh channels in create modal
+async function refreshChannels() {
+  const refreshIcon = document.getElementById('channelRefreshIcon');
+  if (refreshIcon) {
+    refreshIcon.classList.add('animate-spin');
+  }
+
+  try {
+    await populateChannels();
+    showToast('success', 'Channels refreshed successfully');
+  } catch (error) {
+    console.error('Error refreshing channels:', error);
+    showToast('error', 'Failed to refresh channels');
+  } finally {
+    if (refreshIcon) {
+      refreshIcon.classList.remove('animate-spin');
+    }
+  }
+}
+
+// Function to refresh channels in edit modal
+async function refreshEditChannels() {
+  const refreshIcon = document.getElementById('editChannelRefreshIcon');
+  if (refreshIcon) {
+    refreshIcon.classList.add('animate-spin');
+  }
+
+  try {
+    await populateChannels();
+    showToast('success', 'Channels refreshed successfully');
+  } catch (error) {
+    console.error('Error refreshing channels:', error);
+    showToast('error', 'Failed to refresh channels');
+  } finally {
+    if (refreshIcon) {
+      refreshIcon.classList.remove('animate-spin');
+    }
+  }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  initModal();
+  populateChannels(); // Load channels when the page loads
+});
+
+// Form submission handler
+document.addEventListener('DOMContentLoaded', function () {
+  const form = document.getElementById('newStreamForm');
+  if (!form) return;
+
+  form.addEventListener('submit', async function (e) {
+    e.preventDefault();
+    const videoId = document.getElementById('selectedVideoId').value;
+    const channelId = document.getElementById('channelSelect').value;
+
+    if (!videoId) {
+      alert('Please select a video before creating the stream');
+      const videoSelector = document.querySelector('[onclick="toggleVideoSelector()"]');
+      videoSelector.classList.add('border-red-500');
+      videoSelector.classList.remove('border-gray-600');
+      videoSelector.animate([
+        { transform: 'translateX(0px)' },
+        { transform: 'translateX(-5px)' },
+        { transform: 'translateX(5px)' },
+        { transform: 'translateX(-5px)' },
+        { transform: 'translateX(0px)' }
+      ], {
+        duration: 300,
+        iterations: 1
+      });
+      return;
+    }
+
+    if (!channelId) {
+      alert('Please select a channel before creating the stream');
+      const channelSelect = document.getElementById('channelSelect');
+      channelSelect.focus();
+      return;
+    }
+
+    // Get channel details to fill in RTMP URL and Stream Key
+    const channel = await getChannelDetails(channelId);
+    if (!channel) {
+      alert('Failed to get channel details. Please try again.');
+      return;
+    }
+
+    const scheduleInput = document.getElementById('scheduleInput');
+    const durationInput = document.getElementById('durationInput');
+    const resolutionElement = document.getElementById('currentResolution');
+    const resolutionText = resolutionElement ? resolutionElement.textContent : '';
+    const resolution = resolutionText.split(' ')[0];
+
+    const streamTitleElement = document.getElementById('streamTitle');
+    const bitrateSelect = document.getElementById('bitrateSelect');
+    const fpsSelect = document.getElementById('fpsSelect');
+    const resolutionSelect = document.getElementById('resolutionSelect');
+    const loopVideoInput = document.querySelector('input[name="loopVideo"]');
+    const advancedSettingsContent = document.getElementById('advancedSettingsContent');
+
+    // Determine if advanced settings should be used based on whether:
+    // 1. The advanced settings panel was ever opened, OR
+    // 2. Any values differ from defaults (bitrate != 2500, fps != 30, resolution != 720)
+    const isAdvancedPanelOpen = advancedSettingsContent ? !advancedSettingsContent.classList.contains('hidden') : false;
+    const bitrateValue = bitrateSelect ? parseInt(bitrateSelect.value) : 2500;
+    const fpsValue = fpsSelect ? parseInt(fpsSelect.value) : 30;
+    const resolutionValue = resolutionSelect ? resolutionSelect.value : '720';
+    
+    // Check if user changed any advanced settings from defaults
+    const hasNonDefaultSettings = bitrateValue !== 2500 || fpsValue !== 30 || resolutionValue !== '720';
+    const shouldUseAdvancedSettings = isAdvancedPanelOpen || hasNonDefaultSettings;
+
+    const formData = {
+      streamTitle: streamTitleElement ? streamTitleElement.value : '',
+      videoId: videoId,
+      rtmpUrl: channel.rtmp_url,
+      streamKey: channel.stream_key,
+      platform: channel.platform,
+      platform_icon: channel.platform_icon,
+      bitrate: bitrateValue,
+      fps: fpsValue,
+      loopVideo: loopVideoInput ? loopVideoInput.checked : false,
+      orientation: currentOrientation,
+      resolution: resolution,
+      useAdvancedSettings: shouldUseAdvancedSettings
+    };
+
+    if (scheduleInput && scheduleInput.value) {
+      formData.scheduleTime = scheduleInput.value;
+    }
+    if (durationInput && durationInput.value) {
+      formData.duration = durationInput.value;
+    }
+
+    // Add recurrence data if set
+    const recurrenceType = document.getElementById('recurrenceType')?.value;
+    if (recurrenceType && recurrenceType !== '') {
+      formData.recurrenceType = recurrenceType;
+      const recurrenceValue = document.getElementById('recurrenceValue')?.value;
+      if (recurrenceValue) {
+        formData.recurrenceValue = recurrenceValue;
+      }
+    }
+
+    const csrfToken = document.querySelector('input[name="_csrf"]')?.value;
+    fetch('/api/streams', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {})
+      },
+      body: JSON.stringify(formData)
+    })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          alert('Stream created successfully!');
+          closeNewStreamModal();
+          setTimeout(() => {
+            window.location.reload();
+          }, 500);
+        } else {
+          alert(`Error: ${data.error || 'Failed to create stream'}`);
+        }
+      })
+      .catch(error => {
+        console.error('Error:', error);
+        alert('An error occurred while creating the stream');
+      });
+  });
+});

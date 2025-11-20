@@ -1,202 +1,184 @@
-const { db } = require('../db/database');
-const { v4: uuidv4 } = require('uuid');
+const { query } = require('../db/database');
 
 class Playlist {
-  static findAll(userId) {
-    return new Promise((resolve, reject) => {
-      db.all(
+  static async findAll(userId) {
+    try {
+      const result = await query(
         `SELECT p.*, 
          COUNT(pv.id) as video_count,
-         GROUP_CONCAT(v.thumbnail_path) as thumbnails
+         STRING_AGG(v.thumbnail_path, ',') as thumbnails
          FROM playlists p 
          LEFT JOIN playlist_videos pv ON p.id = pv.playlist_id 
          LEFT JOIN videos v ON pv.video_id = v.id
-         WHERE p.user_id = ? 
+         WHERE p.user_id = $1::uuid
          GROUP BY p.id
          ORDER BY p.updated_at DESC`,
-        [userId],
-        (err, rows) => {
-          if (err) {
-            return reject(err);
-          }
-          resolve(rows);
-        }
+        [userId]
       );
-    });
+      return result.rows;
+    } catch (error) {
+      console.error('Error finding playlists:', error);
+      throw error;
+    }
   }
 
-  static findById(id) {
-    return new Promise((resolve, reject) => {
-      db.get('SELECT * FROM playlists WHERE id = ?', [id], (err, row) => {
-        if (err) {
-          return reject(err);
-        }
-        resolve(row);
-      });
-    });
+  static async findById(id) {
+    try {
+      const result = await query('SELECT * FROM playlists WHERE id = $1::uuid', [id]);
+      return result.rows[0];
+    } catch (error) {
+      console.error('Error finding playlist:', error);
+      throw error;
+    }
   }
 
-  static findByIdWithVideos(id) {
-    return new Promise((resolve, reject) => {
-      db.get('SELECT * FROM playlists WHERE id = ?', [id], (err, playlist) => {
-        if (err) {
-          return reject(err);
-        }
-        if (!playlist) {
-          return resolve(null);
-        }
-
-        db.all(
-          `SELECT v.*, pv.position 
-           FROM playlist_videos pv 
-           JOIN videos v ON pv.video_id = v.id 
-           WHERE pv.playlist_id = ? 
-           ORDER BY pv.position ASC`,
-          [id],
-          (err, videos) => {
-            if (err) {
-              return reject(err);
-            }
-            playlist.videos = videos;
-            resolve(playlist);
-          }
-        );
-      });
-    });
-  }
-
-  static create(playlistData) {
-    const playlistId = uuidv4();
-    return new Promise((resolve, reject) => {
-      db.run(
-        'INSERT INTO playlists (id, name, description, is_shuffle, user_id) VALUES (?, ?, ?, ?, ?)',
-        [playlistId, playlistData.name, playlistData.description || null, playlistData.is_shuffle || 0, playlistData.user_id],
-        function (err) {
-          if (err) {
-            return reject(err);
-          }
-          resolve({ id: playlistId, ...playlistData });
-        }
-      );
-    });
-  }
-
-  static update(id, playlistData) {
-    const fields = [];
-    const values = [];
-    
-    Object.entries(playlistData).forEach(([key, value]) => {
-      if (key !== 'id' && key !== 'user_id') {
-        fields.push(`${key} = ?`);
-        values.push(value);
+  static async findByIdWithVideos(id) {
+    try {
+      const playlistResult = await query('SELECT * FROM playlists WHERE id = $1::uuid', [id]);
+      const playlist = playlistResult.rows[0];
+      
+      if (!playlist) {
+        return null;
       }
-    });
+
+      const videosResult = await query(
+        `SELECT v.*, pv.position 
+         FROM playlist_videos pv 
+         JOIN videos v ON pv.video_id = v.id 
+         WHERE pv.playlist_id = $1::uuid
+         ORDER BY pv.position ASC`,
+        [id]
+      );
+      
+      playlist.videos = videosResult.rows;
+      return playlist;
+    } catch (error) {
+      console.error('Error finding playlist with videos:', error);
+      throw error;
+    }
+  }
+
+  static async create(playlistData) {
+    try {
+      const result = await query(
+        `INSERT INTO playlists (name, description, is_shuffle, user_id) 
+         VALUES ($1, $2, $3, $4::uuid) 
+         RETURNING *`,
+        [
+          playlistData.name, 
+          playlistData.description || null, 
+          playlistData.is_shuffle || false, 
+          playlistData.user_id
+        ]
+      );
+      return result.rows[0];
+    } catch (error) {
+      console.error('Error creating playlist:', error);
+      throw error;
+    }
+  }
+
+  static async update(id, playlistData) {
+    try {
+      const fields = [];
+      const values = [];
+      let paramCount = 1;
+      
+      Object.entries(playlistData).forEach(([key, value]) => {
+        if (key !== 'id' && key !== 'user_id') {
+          fields.push(`${key} = $${paramCount}`);
+          values.push(value);
+          paramCount++;
+        }
+      });
+      
+      fields.push('updated_at = CURRENT_TIMESTAMP');
+      values.push(id);
+
+      const sql = `UPDATE playlists SET ${fields.join(', ')} WHERE id = $${paramCount}::uuid RETURNING *`;
+      
+      const result = await query(sql, values);
+      return result.rows[0];
+    } catch (error) {
+      console.error('Error updating playlist:', error);
+      throw error;
+    }
+  }
+
+  static async delete(id) {
+    try {
+      const result = await query('DELETE FROM playlists WHERE id = $1::uuid', [id]);
+      return { deleted: result.rowCount > 0 };
+    } catch (error) {
+      console.error('Error deleting playlist:', error);
+      throw error;
+    }
+  }
+
+  static async addVideo(playlistId, videoId, position) {
+    try {
+      const result = await query(
+        `INSERT INTO playlist_videos (playlist_id, video_id, position) 
+         VALUES ($1::uuid, $2::uuid, $3) 
+         RETURNING *`,
+        [playlistId, videoId, position]
+      );
+      return result.rows[0];
+    } catch (error) {
+      console.error('Error adding video to playlist:', error);
+      throw error;
+    }
+  }
+
+  static async removeVideo(playlistId, videoId) {
+    try {
+      const result = await query(
+        'DELETE FROM playlist_videos WHERE playlist_id = $1::uuid AND video_id = $2::uuid',
+        [playlistId, videoId]
+      );
+      return { deleted: result.rowCount > 0 };
+    } catch (error) {
+      console.error('Error removing video from playlist:', error);
+      throw error;
+    }
+  }
+
+  static async updateVideoPositions(playlistId, videoPositions) {
+    const { pool } = require('../db/database');
+    const client = await pool.connect();
     
-    fields.push('updated_at = CURRENT_TIMESTAMP');
-    values.push(id);
-
-    const query = `UPDATE playlists SET ${fields.join(', ')} WHERE id = ?`;
-    
-    return new Promise((resolve, reject) => {
-      db.run(query, values, function (err) {
-        if (err) {
-          return reject(err);
-        }
-        resolve({ id, ...playlistData });
-      });
-    });
+    try {
+      await client.query('BEGIN');
+      
+      for (const { videoId, position } of videoPositions) {
+        await client.query(
+          'UPDATE playlist_videos SET position = $1 WHERE playlist_id = $2::uuid AND video_id = $3::uuid',
+          [position, playlistId, videoId]
+        );
+      }
+      
+      await client.query('COMMIT');
+      return { updated: true };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      console.error('Error updating video positions:', error);
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
-  static delete(id) {
-    return new Promise((resolve, reject) => {
-      db.run('DELETE FROM playlists WHERE id = ?', [id], function (err) {
-        if (err) {
-          return reject(err);
-        }
-        resolve({ deleted: this.changes > 0 });
-      });
-    });
-  }
-
-  static addVideo(playlistId, videoId, position) {
-    const id = uuidv4();
-    return new Promise((resolve, reject) => {
-      db.run(
-        'INSERT INTO playlist_videos (id, playlist_id, video_id, position) VALUES (?, ?, ?, ?)',
-        [id, playlistId, videoId, position],
-        function (err) {
-          if (err) {
-            return reject(err);
-          }
-          resolve({ id, playlist_id: playlistId, video_id: videoId, position });
-        }
+  static async getNextPosition(playlistId) {
+    try {
+      const result = await query(
+        'SELECT MAX(position) as max_position FROM playlist_videos WHERE playlist_id = $1::uuid',
+        [playlistId]
       );
-    });
-  }
-
-  static removeVideo(playlistId, videoId) {
-    return new Promise((resolve, reject) => {
-      db.run(
-        'DELETE FROM playlist_videos WHERE playlist_id = ? AND video_id = ?',
-        [playlistId, videoId],
-        function (err) {
-          if (err) {
-            return reject(err);
-          }
-          resolve({ deleted: this.changes > 0 });
-        }
-      );
-    });
-  }
-
-  static updateVideoPositions(playlistId, videoPositions) {
-    return new Promise((resolve, reject) => {
-      db.serialize(() => {
-        db.run('BEGIN TRANSACTION');
-        
-        let completed = 0;
-        let hasError = false;
-
-        videoPositions.forEach(({ videoId, position }) => {
-          db.run(
-            'UPDATE playlist_videos SET position = ? WHERE playlist_id = ? AND video_id = ?',
-            [position, playlistId, videoId],
-            function (err) {
-              if (err && !hasError) {
-                hasError = true;
-                db.run('ROLLBACK');
-                return reject(err);
-              }
-              
-              completed++;
-              if (completed === videoPositions.length && !hasError) {
-                db.run('COMMIT', (err) => {
-                  if (err) {
-                    return reject(err);
-                  }
-                  resolve({ updated: true });
-                });
-              }
-            }
-          );
-        });
-      });
-    });
-  }
-
-  static getNextPosition(playlistId) {
-    return new Promise((resolve, reject) => {
-      db.get(
-        'SELECT MAX(position) as max_position FROM playlist_videos WHERE playlist_id = ?',
-        [playlistId],
-        (err, row) => {
-          if (err) {
-            return reject(err);
-          }
-          resolve((row.max_position || 0) + 1);
-        }
-      );
-    });
+      return (result.rows[0].max_position || 0) + 1;
+    } catch (error) {
+      console.error('Error getting next position:', error);
+      throw error;
+    }
   }
 }
 

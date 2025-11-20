@@ -3,3 +3,4 @@ npm-debug.log
 db/*.db
 logs/*
 .env 
+*.md

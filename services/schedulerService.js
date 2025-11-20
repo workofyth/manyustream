@@ -5,6 +5,8 @@ let streamingService = null;
 let initialized = false;
 let scheduleIntervalId = null;
 let durationIntervalId = null;
+let recurringCheckIntervalId = null;
+
 function init(streamingServiceInstance) {
   if (initialized) {
     console.log('Stream scheduler already initialized');
@@ -15,8 +17,10 @@ function init(streamingServiceInstance) {
   console.log('Stream scheduler initialized');
   scheduleIntervalId = setInterval(checkScheduledStreams, 60 * 1000);
   durationIntervalId = setInterval(checkStreamDurations, 60 * 1000);
+  recurringCheckIntervalId = setInterval(checkRecurringStreams, 60 * 1000);
   checkScheduledStreams();
   checkStreamDurations();
+  checkRecurringStreams();
 }
 async function checkScheduledStreams() {
   try {
@@ -107,6 +111,72 @@ function cancelStreamTermination(streamId) {
 function handleStreamStopped(streamId) {
   return cancelStreamTermination(streamId);
 }
+
+async function checkRecurringStreams() {
+  try {
+    if (!streamingService) {
+      console.error('StreamingService not initialized in scheduler');
+      return;
+    }
+    const recurringStreams = await Stream.findRecurringStreams();
+    const now = new Date();
+    
+    for (const stream of recurringStreams) {
+      if (!stream.schedule_time || !stream.recurrence_type) {
+        continue;
+      }
+      
+      const baseTime = new Date(stream.schedule_time);
+      const nextRunTime = calculateNextRecurrence(baseTime, stream.recurrence_type, stream.recurrence_value);
+      
+      if (nextRunTime <= now && nextRunTime.getTime() > now.getTime() - 60000) {
+        // Within the last minute and time to run
+        console.log(`[Scheduler] Running recurring stream ${stream.id} (${stream.recurrence_type})`);
+        const result = await streamingService.startStream(stream.id);
+        if (result.success) {
+          console.log(`[Scheduler] Started recurring stream ${stream.id}`);
+        } else {
+          console.error(`[Scheduler] Failed to start recurring stream ${stream.id}: ${result.error}`);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('[Scheduler] Error checking recurring streams:', error);
+  }
+}
+
+function calculateNextRecurrence(baseTime, type, value) {
+  const next = new Date(baseTime);
+  const now = new Date();
+  
+  if (type === 'daily') {
+    next.setDate(next.getDate() + 1);
+    while (next <= now) {
+      next.setDate(next.getDate() + 1);
+    }
+  } else if (type === 'weekly') {
+    const targetDayOfWeek = parseInt(value) || 0;
+    const currentDayOfWeek = next.getDay();
+    const daysUntilTarget = (targetDayOfWeek - currentDayOfWeek + 7) % 7 || 7;
+    next.setDate(next.getDate() + daysUntilTarget);
+    while (next <= now) {
+      next.setDate(next.getDate() + 7);
+    }
+  } else if (type === 'monthly') {
+    const targetDay = parseInt(value) || 1;
+    next.setDate(targetDay);
+    if (next <= now) {
+      next.setMonth(next.getMonth() + 1);
+      next.setDate(targetDay);
+    }
+    while (next <= now) {
+      next.setMonth(next.getMonth() + 1);
+    }
+  }
+  
+  return next;
+}
+
 module.exports = {
   init,
   scheduleStreamTermination,

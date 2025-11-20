@@ -1,8 +1,8 @@
-const { v4: uuidv4 } = require('uuid');
-const { db } = require('../db/database');
+const { query, pool } = require('../db/database');
+const Channel = require('./Channel');
+
 class Stream {
-  static create(streamData) {
-    const id = uuidv4();
+  static async create(streamData) {
     const {
       title,
       video_id,
@@ -10,60 +10,86 @@ class Stream {
       stream_key,
       platform,
       platform_icon,
+      channelIds = [],
       bitrate = 2500,
       resolution,
       fps = 30,
       orientation = 'horizontal',
       loop_video = true,
       schedule_time = null,
+      recurrence_type = null,
+      recurrence_value = null,
       duration = null,
       use_advanced_settings = false,
       user_id
     } = streamData;
-    const loop_video_int = loop_video ? 1 : 0;
-    const use_advanced_settings_int = use_advanced_settings ? 1 : 0;
-    const status = schedule_time ? 'scheduled' : 'offline';
-    const status_updated_at = new Date().toISOString();
-    return new Promise((resolve, reject) => {
-      db.run(
+
+    const client = await pool.connect();
+    
+    try {
+      await client.query('BEGIN');
+
+      const status = schedule_time ? 'scheduled' : 'offline';
+      
+      // Create stream with rtmp_url, stream_key, platform
+      const streamResult = await client.query(
         `INSERT INTO streams (
-          id, title, video_id, rtmp_url, stream_key, platform, platform_icon,
+          title, video_id, rtmp_url, stream_key, platform, platform_icon,
           bitrate, resolution, fps, orientation, loop_video,
-          schedule_time, duration, status, status_updated_at, use_advanced_settings, user_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          schedule_time, recurrence_type, recurrence_value, duration, 
+          status, use_advanced_settings, user_id
+        ) VALUES ($1, $2::uuid, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18::uuid)
+        RETURNING *`,
         [
-          id, title, video_id, rtmp_url, stream_key, platform, platform_icon,
-          bitrate, resolution, fps, orientation, loop_video_int,
-          schedule_time, duration, status, status_updated_at, use_advanced_settings_int, user_id
-        ],
-        function (err) {
-          if (err) {
-            console.error('Error creating stream:', err.message);
-            return reject(err);
-          }
-          resolve({ id, ...streamData, status, status_updated_at });
-        }
+          title, video_id, rtmp_url, stream_key, platform, platform_icon,
+          bitrate, resolution, fps, orientation, loop_video,
+          schedule_time, recurrence_type, recurrence_value, duration,
+          status, use_advanced_settings, user_id
+        ]
       );
-    });
-  }
-  static findById(id) {
-    return new Promise((resolve, reject) => {
-      db.get('SELECT * FROM streams WHERE id = ?', [id], (err, row) => {
-        if (err) {
-          console.error('Error finding stream:', err.message);
-          return reject(err);
+
+      const stream = streamResult.rows[0];
+
+      // Link channels to stream
+      if (channelIds && channelIds.length > 0) {
+        for (const channelId of channelIds) {
+          await client.query(
+            `INSERT INTO stream_channels (stream_id, channel_id)
+             VALUES ($1::uuid, $2::uuid)
+             ON CONFLICT (stream_id, channel_id) DO NOTHING`,
+            [stream.id, channelId]
+          );
         }
-        if (row) {
-          row.loop_video = row.loop_video === 1;
-          row.use_advanced_settings = row.use_advanced_settings === 1;
-        }
-        resolve(row);
-      });
-    });
+      }
+
+      await client.query('COMMIT');
+      
+      // Fetch stream with channels
+      const streamWithChannels = await Stream.getStreamWithChannels(stream.id);
+      return streamWithChannels;
+      
+    } catch (error) {
+      await client.query('ROLLBACK');
+      console.error('Error creating stream:', error);
+      throw error;
+    } finally {
+      client.release();
+    }
   }
-  static findAll(userId = null, filter = null) {
-    return new Promise((resolve, reject) => {
-      let query = `
+
+  static async findById(id) {
+    try {
+      const result = await query('SELECT * FROM streams WHERE id = $1::uuid', [id]);
+      return result.rows[0];
+    } catch (error) {
+      console.error('Error finding stream:', error);
+      throw error;
+    }
+  }
+
+  static async findAll(userId = null, filter = null) {
+    try {
+      let sql = `
         SELECT s.*, 
                v.title AS video_title, 
                v.filepath AS video_filepath,
@@ -77,130 +103,149 @@ class Stream {
                  WHEN p.id IS NOT NULL THEN 'playlist'
                  WHEN v.id IS NOT NULL THEN 'video'
                  ELSE NULL
-               END AS video_type
+               END AS video_type,
+               COUNT(DISTINCT sc.channel_id) as channel_count
         FROM streams s
         LEFT JOIN videos v ON s.video_id = v.id
         LEFT JOIN playlists p ON s.video_id = p.id
+        LEFT JOIN stream_channels sc ON s.id = sc.stream_id
       `;
+      
       const params = [];
+      let paramCount = 1;
+      
       if (userId) {
-        query += ' WHERE s.user_id = ?';
+        sql += ` WHERE s.user_id = $${paramCount}::uuid`;
         params.push(userId);
+        paramCount++;
+        
         if (filter) {
           if (filter === 'live') {
-            query += " AND s.status = 'live'";
+            sql += " AND s.status = 'live'";
           } else if (filter === 'scheduled') {
-            query += " AND s.status = 'scheduled'";
+            sql += " AND s.status = 'scheduled'";
           } else if (filter === 'offline') {
-            query += " AND s.status = 'offline'";
+            sql += " AND s.status = 'offline'";
           }
         }
       }
-      query += ' ORDER BY s.created_at DESC';
-      db.all(query, params, (err, rows) => {
-        if (err) {
-          console.error('Error finding streams:', err.message);
-          return reject(err);
-        }
-        if (rows) {
-          rows.forEach(row => {
-            row.loop_video = row.loop_video === 1;
-            row.use_advanced_settings = row.use_advanced_settings === 1;
-          });
-        }
-        resolve(rows || []);
-      });
-    });
-  }
-  static update(id, streamData) {
-    const fields = [];
-    const values = [];
-    Object.entries(streamData).forEach(([key, value]) => {
-      if (key === 'loop_video' && typeof value === 'boolean') {
-        fields.push(`${key} = ?`);
-        values.push(value ? 1 : 0);
-      } else {
-        fields.push(`${key} = ?`);
-        values.push(value);
-      }
-    });
-    fields.push('updated_at = CURRENT_TIMESTAMP');
-    values.push(id);
-    const query = `UPDATE streams SET ${fields.join(', ')} WHERE id = ?`;
-    return new Promise((resolve, reject) => {
-      db.run(query, values, function (err) {
-        if (err) {
-          console.error('Error updating stream:', err.message);
-          return reject(err);
-        }
-        resolve({ id, ...streamData });
-      });
-    });
-  }
-  static delete(id, userId) {
-    return new Promise((resolve, reject) => {
-      db.run(
-        'DELETE FROM streams WHERE id = ? AND user_id = ?',
-        [id, userId],
-        function (err) {
-          if (err) {
-            console.error('Error deleting stream:', err.message);
-            return reject(err);
-          }
-          resolve({ success: true, deleted: this.changes > 0 });
-        }
-      );
-    });
-  }
-  static updateStatus(id, status, userId, options = {}) {
-    const status_updated_at = new Date().toISOString();
-    const { startTimeOverride = null, endTimeOverride = null } = options;
-    let start_time = null;
-    let end_time = null;
-    if (status === 'live') {
-      start_time = startTimeOverride || new Date().toISOString();
-    } else if (status === 'offline') {
-      end_time = endTimeOverride || new Date().toISOString();
+      
+      sql += ' GROUP BY s.id, v.id, v.title, v.filepath, v.thumbnail_path, v.duration, v.resolution, v.bitrate, v.fps, p.id, p.name';
+      sql += ' ORDER BY s.created_at DESC';
+      
+      const result = await query(sql, params);
+      return result.rows;
+    } catch (error) {
+      console.error('Error finding streams:', error);
+      throw error;
     }
-    return new Promise((resolve, reject) => {
-      db.run(
-        `UPDATE streams SET 
-          status = ?, 
-          status_updated_at = ?, 
-          start_time = CASE WHEN ? IS NOT NULL THEN ? ELSE start_time END, 
-          end_time = CASE WHEN ? IS NOT NULL THEN ? ELSE end_time END,
-          updated_at = CURRENT_TIMESTAMP
-         WHERE id = ? AND user_id = ?`,
-        [
-          status,
-          status_updated_at,
-          start_time,
-          start_time,
-          end_time,
-          end_time,
-          id,
-          userId
-        ],
-        function (err) {
-          if (err) {
-            console.error('Error updating stream status:', err.message);
-            return reject(err);
-          }
-          resolve({
-            id,
-            status,
-            status_updated_at,
-            start_time,
-            end_time,
-            updated: this.changes > 0
-          });
-        }
-      );
-    });
   }
+
+  static async update(id, streamData) {
+    const client = await pool.connect();
+    
+    try {
+      await client.query('BEGIN');
+      
+      const fields = [];
+      const values = [];
+      let paramCount = 1;
+
+      // Extract channelIds if provided
+      const channelIds = streamData.channelIds;
+      delete streamData.channelIds;
+
+      Object.entries(streamData).forEach(([key, value]) => {
+        fields.push(`${key} = $${paramCount}`);
+        values.push(value);
+        paramCount++;
+      });
+
+      fields.push('updated_at = CURRENT_TIMESTAMP');
+      values.push(id);
+
+      const sql = `UPDATE streams SET ${fields.join(', ')} WHERE id = $${paramCount}::uuid RETURNING *`;
+
+      const result = await client.query(sql, values);
+
+      // Update channel links if provided
+      if (channelIds !== undefined) {
+        // Remove existing links
+        await client.query('DELETE FROM stream_channels WHERE stream_id = $1::uuid', [id]);
+        
+        // Add new links
+        if (channelIds && channelIds.length > 0) {
+          for (const channelId of channelIds) {
+            await client.query(
+              `INSERT INTO stream_channels (stream_id, channel_id)
+               VALUES ($1::uuid, $2::uuid)`,
+              [id, channelId]
+            );
+          }
+        }
+      }
+
+      await client.query('COMMIT');
+      
+      return result.rows[0];
+    } catch (error) {
+      await client.query('ROLLBACK');
+      console.error('Error updating stream:', error);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  static async delete(id, userId) {
+    try {
+      // stream_channels will be deleted automatically due to ON DELETE CASCADE
+      const result = await query(
+        'DELETE FROM streams WHERE id = $1::uuid AND user_id = $2::uuid',
+        [id, userId]
+      );
+      return { success: true, deleted: result.rowCount > 0 };
+    } catch (error) {
+      console.error('Error deleting stream:', error);
+      throw error;
+    }
+  }
+
+  static async updateStatus(id, status, userId, options = {}) {
+    try {
+      const { startTimeOverride = null, endTimeOverride = null } = options;
+      
+      let start_time = null;
+      let end_time = null;
+      
+      if (status === 'live') {
+        start_time = startTimeOverride || new Date().toISOString();
+      } else if (status === 'offline') {
+        end_time = endTimeOverride || new Date().toISOString();
+      }
+
+      const result = await query(
+        `UPDATE streams SET 
+          status = $1, 
+          status_updated_at = CURRENT_TIMESTAMP,
+          start_time = CASE WHEN $2::timestamp IS NOT NULL THEN $2::timestamp ELSE start_time END, 
+          end_time = CASE WHEN $3::timestamp IS NOT NULL THEN $3::timestamp ELSE end_time END,
+          updated_at = CURRENT_TIMESTAMP
+         WHERE id = $4::uuid AND user_id = $5::uuid
+         RETURNING *`,
+        [status, start_time, end_time, id, userId]
+      );
+
+      return result.rows[0];
+    } catch (error) {
+      console.error('Error updating stream status:', error);
+      throw error;
+    }
+  }
+
   static async getStreamWithVideo(id) {
-    return new Promise((resolve, reject) => {
-      db.get(
+    try {
+      const result = await query(
         `SELECT s.*, 
                 v.title AS video_title, 
                 v.filepath AS video_filepath, 
@@ -215,28 +260,59 @@ class Stream {
          FROM streams s
          LEFT JOIN videos v ON s.video_id = v.id
          LEFT JOIN playlists p ON s.video_id = p.id
-         WHERE s.id = ?`,
-        [id],
-        (err, row) => {
-          if (err) {
-            console.error('Error fetching stream with video:', err.message);
-            return reject(err);
-          }
-          if (row) {
-            row.loop_video = row.loop_video === 1;
-            row.use_advanced_settings = row.use_advanced_settings === 1;
-          }
-          resolve(row);
-        }
+         WHERE s.id = $1::uuid`,
+        [id]
       );
-    });
+      
+      return result.rows[0];
+    } catch (error) {
+      console.error('Error fetching stream with video:', error);
+      throw error;
+    }
   }
-  static findScheduledInRange(startTime, endTime) {
-    return new Promise((resolve, reject) => {
-      const startTimeStr = startTime.toISOString();
-      const endTimeStr = endTime.toISOString();
-      const query = `
-        SELECT s.*, 
+
+  static async getStreamWithChannels(id) {
+    try {
+      const stream = await Stream.findById(id);
+      
+      if (!stream) {
+        return null;
+      }
+
+      // Get associated channels
+      const channels = await Channel.getStreamChannels(id);
+      stream.channels = channels;
+      
+      return stream;
+    } catch (error) {
+      console.error('Error fetching stream with channels:', error);
+      throw error;
+    }
+  }
+
+  static async getStreamWithVideoAndChannels(id) {
+    try {
+      const stream = await Stream.getStreamWithVideo(id);
+      
+      if (!stream) {
+        return null;
+      }
+
+      // Get associated channels
+      const channels = await Channel.getStreamChannels(id);
+      stream.channels = channels;
+      
+      return stream;
+    } catch (error) {
+      console.error('Error fetching stream with video and channels:', error);
+      throw error;
+    }
+  }
+
+  static async findScheduledInRange(startTime, endTime) {
+    try {
+      const result = await query(
+        `SELECT s.*, 
                v.title AS video_title, 
                v.filepath AS video_filepath,
                v.thumbnail_path AS video_thumbnail, 
@@ -248,23 +324,38 @@ class Stream {
         LEFT JOIN videos v ON s.video_id = v.id
         WHERE s.status = 'scheduled'
         AND s.schedule_time IS NOT NULL
-        AND s.schedule_time >= ?
-        AND s.schedule_time <= ?
-      `;
-      db.all(query, [startTimeStr, endTimeStr], (err, rows) => {
-        if (err) {
-          console.error('Error finding scheduled streams:', err.message);
-          return reject(err);
-        }
-        if (rows) {
-          rows.forEach(row => {
-            row.loop_video = row.loop_video === 1;
-            row.use_advanced_settings = row.use_advanced_settings === 1;
-          });
-        }
-        resolve(rows || []);
-      });
-    });
+        AND s.schedule_time >= $1::timestamp
+        AND s.schedule_time <= $2::timestamp
+        ORDER BY s.schedule_time ASC`,
+        [startTime.toISOString(), endTime.toISOString()]
+      );
+      
+      return result.rows;
+    } catch (error) {
+      console.error('Error finding scheduled streams:', error);
+      throw error;
+    }
+  }
+
+  static async findRecurringStreams() {
+    try {
+      const result = await query(
+        `SELECT s.*, 
+               v.title AS video_title, 
+               v.filepath AS video_filepath
+        FROM streams s
+        LEFT JOIN videos v ON s.video_id = v.id
+        WHERE s.recurrence_type IS NOT NULL
+        AND s.status != 'live'
+        ORDER BY s.created_at DESC`
+      );
+      
+      return result.rows;
+    } catch (error) {
+      console.error('Error finding recurring streams:', error);
+      throw error;
+    }
   }
 }
+
 module.exports = Stream;

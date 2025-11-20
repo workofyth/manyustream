@@ -4,3 +4,30 @@ logs/
 
 # ignore real env from repo
 .env
+
+# PostgreSQL backup files
+*.sql
+backup_*.sql
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Docker volumes (if using local directories)
+postgres_data/
+redis_data/
+minio_data/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.md
+*.sh

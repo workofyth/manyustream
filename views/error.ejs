@@ -3,11 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>
-    <%= title %> - StreamFlow Lite
-  </title>
-  <link rel="icon" href="/images/logo_mobile.svg" type="image/svg+xml">
-  <link rel="alternate icon" href="/images/favicon.ico" type="image/x-icon">
+  <title><%= title %> - StreamFlow</title>
+  <link rel="icon" href="/images/logo.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -25,17 +22,16 @@
         },
         extend: {
           colors: {
-            'primary': '#0055FF',
-            'secondary': '#0043CA',
-            'dark': {
-              '900': '#121212',
-              '800': '#252525',
-              '700': '#2D2D2D',
-              '600': '#3D3D3D',
-              '500': '#6E6E6E',
-              '400': '#8F8F8F',
-              '100': '#E5E5E5',
-            }
+            'primary': '#3C50E0',
+            'secondary': '#80CAEE',
+            'body': '#64748B',
+            'bodydark': '#AEB7C0',
+            'stroke': '#E2E8F0',
+            'gray': '#EFF4FB',
+            'whiten': '#F1F5F9',
+            'boxdark': '#24303F',
+            'boxdark-2': '#1A222C',
+            'danger': '#D34053',
           }
         }
       }
@@ -43,30 +39,49 @@
   </script>
 </head>
 
-<body class="bg-dark-900 text-white font-inter">
-  <div class="min-h-screen flex items-center justify-center px-6">
-    <div class="w-full max-w-md bg-dark-800 rounded-xl shadow-xl p-8 text-center">
-      
-      <div class="flex justify-center mb-8">
-        <img src="/images/logo_mobile.svg" alt="StreamFlow Logo" class="h-10">
+<body class="bg-whiten dark:bg-boxdark-2">
+  <div class="flex h-screen items-center justify-center px-4">
+    <div class="w-full max-w-md">
+      <!-- Logo -->
+      <div class="mb-8 flex justify-center">
+        <img src="/images/logo.svg" alt="StreamFlow Logo" class="h-16">
       </div>
 
-      <div class="mt-4">
-        <div class="flex justify-center mb-6">
-          <div class="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center">
-            <i class="ti ti-alert-triangle text-red-500 text-3xl"></i>
-          </div>
+      <!-- Error Card -->
+      <div class="rounded-sm border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark p-8 text-center">
+        <!-- Error Icon -->
+        <div class="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-danger bg-opacity-10">
+          <i class="ti ti-alert-triangle text-4xl text-danger"></i>
         </div>
 
-        <h2 class="text-xl font-bold mb-4">Error</h2>
-        <p class="text-gray-400 mb-6">
+        <!-- Error Content -->
+        <h2 class="mb-3 text-2xl font-bold text-black dark:text-white">
+          Oops! Something went wrong
+        </h2>
+        <p class="mb-6 text-bodydark">
           <%= error %>
         </p>
 
-        <a href="/"
-          class="inline-block bg-primary hover:bg-blue-600 text-white py-2.5 px-6 rounded-lg font-medium transition-colors">
-          Back to Home
-        </a>
+        <!-- Actions -->
+        <div class="flex flex-col gap-3 sm:flex-row sm:justify-center">
+          <a href="/"
+            class="inline-flex items-center justify-center gap-2 rounded-md bg-primary py-3 px-6 text-center font-medium text-white hover:bg-opacity-90">
+            <i class="ti ti-home"></i>
+            <span>Back to Home</span>
+          </a>
+          <button onclick="window.history.back()"
+            class="inline-flex items-center justify-center gap-2 rounded-md border border-stroke py-3 px-6 text-center font-medium text-black hover:shadow-1 dark:border-strokedark dark:text-white">
+            <i class="ti ti-arrow-left"></i>
+            <span>Go Back</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="mt-6 text-center">
+        <p class="text-sm text-bodydark">
+          Need help? <a href="https://github.com/bangtutorial/streamflow/issues" target="_blank" class="text-primary hover:underline">Contact Support</a>
+        </p>
       </div>
     </div>
   </div>

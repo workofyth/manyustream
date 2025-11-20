@@ -1,0 +1,399 @@
+<% layout('layout') -%>
+
+<!-- Page Heading -->
+<div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+  <div>
+    <h2 class="text-title-md2 font-semibold text-black dark:text-white">
+      Channel Management
+    </h2>
+    <p class="text-sm text-bodydark mt-1">Manage your streaming channels and destinations</p>
+  </div>
+
+  <button onclick="openCreateModal()"
+    class="inline-flex items-center justify-center gap-2 rounded-md bg-primary py-2.5 px-4 text-center font-medium text-white hover:bg-opacity-90">
+    <i class="ti ti-plus"></i>
+    <span>Create Channel</span>
+  </button>
+</div>
+
+<!-- Filters -->
+<div class="mb-6 rounded-sm border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark p-4">
+  <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+    <div class="relative flex-1 max-w-md">
+      <input type="text" id="searchInput" placeholder="Search channels..."
+        class="w-full rounded-lg border border-stroke bg-transparent py-2.5 pl-10 pr-4 text-black outline-none focus:border-primary focus-visible:shadow-none dark:border-strokedark dark:bg-meta-4 dark:text-white dark:focus:border-primary">
+      <i class="ti ti-search absolute left-3 top-1/2 -translate-y-1/2 text-bodydark"></i>
+    </div>
+
+    <select id="platformFilter"
+      class="rounded-lg border border-stroke bg-transparent py-2.5 px-4 text-black outline-none focus:border-primary dark:border-strokedark dark:bg-meta-4 dark:text-white">
+      <option value="">All Platforms</option>
+      <option value="YouTube">YouTube</option>
+      <option value="Facebook">Facebook</option>
+      <option value="Twitch">Twitch</option>
+      <option value="TikTok">TikTok</option>
+      <option value="Instagram">Instagram</option>
+      <option value="Shopee Live">Shopee Live</option>
+      <option value="Restream.io">Restream.io</option>
+      <option value="Custom">Custom</option>
+    </select>
+
+    <select id="statusFilter"
+      class="rounded-lg border border-stroke bg-transparent py-2.5 px-4 text-black outline-none focus:border-primary dark:border-strokedark dark:bg-meta-4 dark:text-white">
+      <option value="">All Status</option>
+      <option value="true">Active</option>
+      <option value="false">Inactive</option>
+    </select>
+  </div>
+</div>
+
+<!-- Channels Table -->
+<div class="rounded-sm border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
+  <div class="max-w-full overflow-x-auto">
+    <table class="w-full table-auto">
+      <thead>
+        <tr class="bg-gray-2 text-left dark:bg-meta-4">
+          <th class="min-w-[200px] py-4 px-4 font-medium text-black dark:text-white xl:pl-11">
+            Channel
+          </th>
+          <th class="min-w-[120px] py-4 px-4 font-medium text-black dark:text-white">
+            Platform
+          </th>
+          <th class="min-w-[120px] py-4 px-4 font-medium text-black dark:text-white">
+            Status
+          </th>
+          <th class="min-w-[150px] py-4 px-4 font-medium text-black dark:text-white">
+            RTMP URL
+          </th>
+          <th class="py-4 px-4 font-medium text-black dark:text-white">
+            Actions
+          </th>
+        </tr>
+      </thead>
+      <tbody id="channelsTableBody">
+        <% if (channels && channels.length > 0) { %>
+          <% channels.forEach(function(channel) { %>
+            <tr class="border-b border-stroke dark:border-strokedark hover:bg-gray-2 dark:hover:bg-meta-4 channel-row"
+                data-name="<%= channel.name.toLowerCase() %>"
+                data-platform="<%= channel.platform %>"
+                data-status="<%= channel.is_active.toString() %>">
+              <!-- Channel Name -->
+              <td class="border-b border-stroke py-5 px-4 pl-9 dark:border-strokedark xl:pl-11">
+                <div class="flex items-center gap-3">
+                  <div class="flex-shrink-0">
+                    <div class="h-12 w-12 rounded-full bg-gray-200 flex items-center justify-center border-2 border-stroke dark:border-strokedark">
+                      <i class="ti <%= channel.platform_icon %> text-xl"></i>
+                    </div>
+                  </div>
+                  <div>
+                    <h5 class="font-medium text-black dark:text-white"><%= channel.name %></h5>
+                    <p class="text-xs text-bodydark"><%= channel.id %></p>
+                  </div>
+                </div>
+              </td>
+
+              <!-- Platform -->
+              <td class="border-b border-stroke py-5 px-4 dark:border-strokedark">
+                <span class="inline-flex items-center rounded-full bg-opacity-10 py-1 px-3 text-sm font-medium bg-primary text-white">
+                  <i class="<%= channel.platform_icon %> mr-1"></i> <%= channel.platform %>
+                </span>
+              </td>
+
+              <!-- Status -->
+              <td class="border-b border-stroke py-5 px-4 dark:border-strokedark">
+                <span class="inline-flex items-center rounded-full bg-opacity-10 py-1 px-3 text-sm font-medium <%= channel.is_active ? 'bg-success text-success' : 'bg-danger text-danger' %>">
+                  <i class="ti ti-circle <%= channel.is_active ? 'text-success' : 'text-danger' %> mr-1 text-xs"></i>
+                  <%= channel.is_active ? 'Active' : 'Inactive' %>
+                </span>
+              </td>
+
+              <!-- RTMP URL -->
+              <td class="border-b border-stroke py-5 px-4 dark:border-strokedark max-w-xs truncate">
+                <p class="text-black dark:text-white truncate" title="<%= channel.rtmp_url %>">
+                  <%= channel.rtmp_url.substring(0, 30) + (channel.rtmp_url.length > 30 ? '...' : '') %>
+                </p>
+              </td>
+
+              <!-- Actions -->
+              <td class="border-b border-stroke py-5 px-4 dark:border-strokedark">
+                <div class="flex items-center space-x-3.5">
+                  <button class="hover:text-primary" onclick="editChannel('<%= channel.id %>')">
+                    <i class="ti ti-edit text-lg"></i>
+                  </button>
+                  <button class="hover:text-warning" onclick="toggleChannel('<%= channel.id %>', <%= channel.is_active %>)">
+                    <i class="ti <%= channel.is_active ? 'ti-toggle-left' : 'ti-toggle-right' %> text-lg"></i>
+                  </button>
+                  <button class="hover:text-danger" onclick="deleteChannel('<%= channel.id %>', '<%= channel.name %>')">
+                    <i class="ti ti-trash text-lg"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          <% }); %>
+        <% } else { %>
+          <tr>
+            <td colspan="5" class="border-b border-stroke py-5 px-4 text-center dark:border-strokedark">
+              <div class="flex flex-col items-center justify-center py-8">
+                <i class="ti ti-broadcast text-6xl text-bodydark mb-3"></i>
+                <p class="text-bodydark">No channels found</p>
+                <button onclick="openCreateModal()"
+                  class="mt-3 inline-flex items-center justify-center gap-2 rounded-md bg-primary py-2.5 px-4 text-center font-medium text-white hover:bg-opacity-90">
+                  <i class="ti ti-plus"></i>
+                  <span>Create First Channel</span>
+                </button>
+              </div>
+            </td>
+          </tr>
+        <% } %>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Create/Edit Modal -->
+<div id="channelModal" class="fixed inset-0 z-50 hidden overflow-y-auto">
+  <div class="flex min-h-screen items-center justify-center px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+    <!-- Background overlay -->
+    <div class="fixed inset-0 bg-black bg-opacity-50 transition-opacity" onclick="closeModal()"></div>
+
+    <!-- Modal panel -->
+    <div class="inline-block w-full max-w-md transform overflow-hidden rounded-lg bg-white text-left align-bottom shadow-xl transition-all dark:bg-boxdark sm:my-8 sm:align-middle">
+      <div class="bg-white px-4 pt-5 pb-4 dark:bg-boxdark sm:p-6 sm:pb-4">
+        <div class="sm:flex sm:items-start">
+          <div class="mt-3 w-full sm:mt-0 sm:ml-4 sm:text-left">
+            <h3 class="text-lg font-medium leading-6 text-black dark:text-white mb-4" id="modalTitle">
+              Create Channel
+            </h3>
+            <form id="channelForm">
+              <input type="hidden" id="channelId">
+              <div class="mb-4">
+                <label class="mb-2.5 block font-medium text-black dark:text-white">
+                  Channel Name
+                </label>
+                <input type="text" id="channelName" placeholder="Enter channel name" required
+                  class="w-full rounded-lg border border-stroke bg-transparent py-2.5 px-4 text-black outline-none focus:border-primary dark:border-strokedark dark:bg-meta-4 dark:text-white">
+              </div>
+              <div class="mb-4">
+                <label class="mb-2.5 block font-medium text-black dark:text-white">
+                  Platform
+                </label>
+                <select id="channelPlatform" 
+                  class="w-full rounded-lg border border-stroke bg-transparent py-2.5 px-4 text-black outline-none focus:border-primary dark:border-strokedark dark:bg-meta-4 dark:text-white">
+                  <option value="">Select Platform (Optional)</option>
+                  <option value="YouTube">YouTube</option>
+                  <option value="Facebook">Facebook</option>
+                  <option value="Twitch">Twitch</option>
+                  <option value="TikTok">TikTok</option>
+                  <option value="Instagram">Instagram</option>
+                  <option value="Shopee Live">Shopee Live</option>
+                  <option value="Restream.io">Restream.io</option>
+                </select>
+              </div>
+              <div class="mb-4">
+                <label class="mb-2.5 block font-medium text-black dark:text-white">
+                  RTMP URL
+                </label>
+                <input type="text" id="rtmpUrl" placeholder="Enter RTMP URL" required
+                  class="w-full rounded-lg border border-stroke bg-transparent py-2.5 px-4 text-black outline-none focus:border-primary dark:border-strokedark dark:bg-meta-4 dark:text-white">
+              </div>
+              <div class="mb-4">
+                <label class="mb-2.5 block font-medium text-black dark:text-white">
+                  Stream Key
+                </label>
+                <input type="text" id="streamKey" placeholder="Enter stream key" required
+                  class="w-full rounded-lg border border-stroke bg-transparent py-2.5 px-4 text-black outline-none focus:border-primary dark:border-strokedark dark:bg-meta-4 dark:text-white">
+              </div>
+              <div class="mb-4">
+                <label class="flex items-center">
+                  <input type="checkbox" id="isActive" class="rounded text-primary focus:ring-primary">
+                  <span class="ml-2 text-sm text-black dark:text-white">Active Channel</span>
+                </label>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+      <div class="bg-gray-50 px-4 py-3 dark:bg-boxdark sm:flex sm:flex-row-reverse sm:px-6">
+        <button type="button" onclick="saveChannel()"
+          class="inline-flex w-full justify-center rounded-md bg-primary px-4 py-2 text-white hover:bg-opacity-90 focus:outline-none sm:ml-3 sm:w-auto">
+          Save
+        </button>
+        <button type="button" onclick="closeModal()"
+          class="mt-3 inline-flex w-full justify-center rounded-md bg-white px-4 py-2 text-black hover:bg-gray-100 focus:outline-none sm:mt-0 sm:w-auto dark:bg-meta-4 dark:text-white dark:hover:bg-boxdark">
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Search functionality
+document.getElementById('searchInput')?.addEventListener('input', function(e) {
+  filterChannels();
+});
+
+// Filter by platform
+document.getElementById('platformFilter')?.addEventListener('change', function(e) {
+  filterChannels();
+});
+
+// Filter by status
+document.getElementById('statusFilter')?.addEventListener('change', function(e) {
+  filterChannels();
+});
+
+function filterChannels() {
+  const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+  const platformFilter = document.getElementById('platformFilter').value;
+  const statusFilter = document.getElementById('statusFilter').value;
+  const rows = document.querySelectorAll('.channel-row');
+
+  rows.forEach(row => {
+    const name = row.dataset.name;
+    const platform = row.dataset.platform;
+    const status = row.dataset.status;
+
+    const matchesSearch = name.includes(searchTerm);
+    const matchesPlatform = !platformFilter || platform === platformFilter;
+    const matchesStatus = !statusFilter || status === statusFilter;
+
+    if (matchesSearch && matchesPlatform && matchesStatus) {
+      row.style.display = '';
+    } else {
+      row.style.display = 'none';
+    }
+  });
+}
+
+// Modal functions
+function openCreateModal() {
+  document.getElementById('modalTitle').textContent = 'Create Channel';
+  document.getElementById('channelForm').reset();
+  document.getElementById('channelId').value = '';
+  document.getElementById('isActive').checked = true;
+  document.getElementById('channelModal').classList.remove('hidden');
+}
+
+function closeModal() {
+  document.getElementById('channelModal').classList.add('hidden');
+}
+
+// Channel operations
+async function saveChannel() {
+  const id = document.getElementById('channelId').value;
+  const name = document.getElementById('channelName').value;
+  const platform = document.getElementById('channelPlatform').value;
+  const rtmpUrl = document.getElementById('rtmpUrl').value;
+  const streamKey = document.getElementById('streamKey').value;
+  const isActive = document.getElementById('isActive').checked;
+
+  const channelData = {
+    name,
+    platform: platform || undefined,
+    rtmp_url: rtmpUrl,
+    stream_key: streamKey,
+    is_active: isActive
+  };
+
+  try {
+    let response;
+    if (id) {
+      // Update existing channel
+      response = await fetch(`/api/channels/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(channelData)
+      });
+    } else {
+      // Create new channel
+      response = await fetch('/api/channels', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(channelData)
+      });
+    }
+
+    const result = await response.json();
+    if (result.success) {
+      location.reload(); // Reload the page to show updated data
+    } else {
+      alert(result.error || 'Failed to save channel');
+    }
+  } catch (error) {
+    console.error('Error saving channel:', error);
+    alert('An error occurred while saving the channel');
+  }
+}
+
+async function editChannel(id) {
+  try {
+    const response = await fetch(`/api/channels/${id}`);
+    const channel = await response.json();
+
+    if (channel.success) {
+      document.getElementById('modalTitle').textContent = 'Edit Channel';
+      document.getElementById('channelId').value = channel.channel.id;
+      document.getElementById('channelName').value = channel.channel.name;
+      document.getElementById('channelPlatform').value = channel.channel.platform;
+      document.getElementById('rtmpUrl').value = channel.channel.rtmp_url;
+      document.getElementById('streamKey').value = channel.channel.stream_key;
+      document.getElementById('isActive').checked = channel.channel.is_active;
+      document.getElementById('channelModal').classList.remove('hidden');
+    }
+  } catch (error) {
+    console.error('Error fetching channel:', error);
+    alert('Failed to load channel data');
+  }
+}
+
+async function toggleChannel(id, isActive) {
+  try {
+    const response = await fetch(`/api/channels/${id}/toggle`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    const result = await response.json();
+    if (result.success) {
+      location.reload(); // Reload the page to show updated data
+    } else {
+      alert(result.error || 'Failed to toggle channel status');
+    }
+  } catch (error) {
+    console.error('Error toggling channel:', error);
+    alert('An error occurred while toggling the channel status');
+  }
+}
+
+async function deleteChannel(id, name) {
+  if (confirm(`Are you sure you want to delete channel "${name}"?`)) {
+    try {
+      const response = await fetch(`/api/channels/${id}`, {
+        method: 'DELETE'
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        location.reload(); // Reload the page to show updated data
+      } else {
+        alert(result.error || 'Failed to delete channel');
+      }
+    } catch (error) {
+      console.error('Error deleting channel:', error);
+      alert('An error occurred while deleting the channel');
+    }
+  }
+}
+
+// Initialize the page
+document.addEventListener('DOMContentLoaded', function() {
+  // Add any initialization code here if needed
+});
+</script>

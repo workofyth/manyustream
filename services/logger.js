@@ -11,14 +11,18 @@ const originalConsoleError = console.error;
 const originalConsoleWarn = console.warn;
 const originalConsoleInfo = console.info;
 const originalConsoleDebug = console.debug;
+let logFileWritable = true;
 function writeToLogFile(level, ...args) {
+  if (!logFileWritable) return;
+  
   const timestamp = new Date().toISOString();
   const message = args.map(arg => typeof arg === 'string' ? arg : util.inspect(arg, { depth: null, colors: false })).join(' ');
   const logEntry = `${timestamp} [${level.toUpperCase()}] ${message}\n`;
   try {
     fs.appendFileSync(logFilePath, logEntry);
   } catch (err) {
-    originalConsoleError('Failed to write to log file:', err);
+    logFileWritable = false;
+    // Silently fail - continue without file logging
   }
 }
 console.log = (...args) => {

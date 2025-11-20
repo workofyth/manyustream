@@ -87,6 +87,8 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
   fs.writeFileSync(concatFile, concatContent);
   
   if (!stream.use_advanced_settings) {
+    // Note: When using copy mode, we rely on the source video having proper GOP size
+    // If YouTube complains about keyframe intervals, enable advanced settings for re-encoding
     return [
       '-hwaccel', 'auto',
       '-loglevel', 'error',
@@ -110,6 +112,10 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
   const bitrate = stream.bitrate || 2500;
   const fps = stream.fps || 30;
   
+  // YouTube requires keyframe interval <= 4 seconds
+  // GOP size = fps * seconds, so for 30fps: 30 * 2 = 60 frames (2 seconds is optimal)
+  const gopSize = fps * 2; // 2 seconds GOP for better compatibility
+  
   return [
     '-hwaccel', 'auto',
     '-loglevel', 'error',
@@ -126,7 +132,10 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
     '-maxrate', `${bitrate * 1.5}k`,
     '-bufsize', `${bitrate * 2}k`,
     '-pix_fmt', 'yuv420p',
-    '-g', `${fps * 2}`,
+    '-g', gopSize.toString(),
+    '-keyint_min', gopSize.toString(),
+    '-sc_threshold', '0',
+    '-force_key_frames', `expr:gte(t,n_forced*${2})`,
     '-s', resolution,
     '-r', fps.toString(),
     '-c:a', 'aac',
@@ -167,13 +176,54 @@ async function buildFFmpegArgs(stream) {
     console.error(`[StreamingService] video.filepath (from DB): ${video.filepath}`);
     console.error(`[StreamingService] Calculated relativeVideoPath: ${relativeVideoPath}`);
     console.error(`[StreamingService] process.cwd(): ${process.cwd()}`);
-    throw new Error('Video file not found on disk. Please check paths and file existence.');
+
+    // Attempt to fetch from MinIO as a fallback (object naming may vary)
+    try {
+      const minio = require('../config/minio');
+      const filename = path.basename(relativeVideoPath);
+      const candidates = [
+        `videos/${filename}`,
+        `${relativeVideoPath.replace(/^uploads[\\/]?/, '')}`,
+        filename
+      ];
+
+      let downloaded = false;
+      for (const objName of candidates) {
+        try {
+          console.log(`[StreamingService] Attempting to download from MinIO: ${objName} -> ${videoPath}`);
+          // ensure directory exists
+          const dir = path.dirname(videoPath);
+          if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+          // try to download
+          // downloadFile will write to the given local path
+          // it may throw if object not found
+          // eslint-disable-next-line no-await-in-loop
+          await minio.downloadFile(objName, videoPath);
+          if (fs.existsSync(videoPath)) {
+            console.log(`[StreamingService] Successfully downloaded ${objName} to ${videoPath}`);
+            downloaded = true;
+            break;
+          }
+        } catch (dlErr) {
+          console.warn(`[StreamingService] MinIO download failed for ${objName}: ${dlErr.message}`);
+        }
+      }
+
+      if (!downloaded) {
+        throw new Error('Video not found locally and MinIO download attempts failed');
+      }
+    } catch (minioErr) {
+      console.error('[StreamingService] MinIO fallback failed or not configured:', minioErr.message || minioErr);
+      throw new Error('Video file not found on disk. Please check paths and file existence.');
+    }
   }
   
   const rtmpUrl = `${stream.rtmp_url.replace(/\/$/, '')}/${stream.stream_key}`;
   const loopOption = stream.loop_video ? '-stream_loop' : '-stream_loop 0';
   const loopValue = stream.loop_video ? '-1' : '0';
   if (!stream.use_advanced_settings) {
+    // Note: When using copy mode, we rely on the source video having proper GOP size
+    // If YouTube complains about keyframe intervals, enable advanced settings for re-encoding
     return [
       '-hwaccel', 'auto',
       '-loglevel', 'error',
@@ -194,6 +244,11 @@ async function buildFFmpegArgs(stream) {
   const resolution = stream.resolution || '1280x720';
   const bitrate = stream.bitrate || 2500;
   const fps = stream.fps || 30;
+  
+  // YouTube requires keyframe interval <= 4 seconds
+  // GOP size = fps * seconds, so for 30fps: 30 * 2 = 60 frames (2 seconds is optimal)
+  const gopSize = fps * 2; // 2 seconds GOP for better compatibility
+  
   return [
     '-hwaccel', 'auto',
     '-loglevel', 'error',
@@ -209,7 +264,10 @@ async function buildFFmpegArgs(stream) {
     '-maxrate', `${bitrate * 1.5}k`,
     '-bufsize', `${bitrate * 2}k`,
     '-pix_fmt', 'yuv420p',
-    '-g', `${fps * 2}`,
+    '-g', gopSize.toString(),
+    '-keyint_min', gopSize.toString(),
+    '-sc_threshold', '0',
+    '-force_key_frames', `expr:gte(t,n_forced*${2})`,
     '-s', resolution,
     '-r', fps.toString(),
     '-c:a', 'aac',
@@ -223,7 +281,9 @@ async function startStream(streamId) {
   try {
     streamRetryCount.set(streamId, 0);
     if (activeStreams.has(streamId)) {
-      return { success: false, error: 'Stream is already active' };
+      // Already active in memory — treat as idempotent success
+      addStreamLog(streamId, 'Start requested but stream already active in memory');
+      return { success: true, message: 'Stream is already active' };
     }
     const stream = await Stream.findById(streamId);
     if (!stream) {
@@ -404,7 +464,54 @@ async function stopStream(streamId) {
     console.log(`[StreamingService] Stopping active stream ${streamId}`);
     manuallyStoppingStreams.add(streamId);
     try {
-      ffmpegProcess.kill('SIGTERM');
+      // If process was spawned detached, kill the process group to ensure all child ffmpeg processes are terminated
+      if (ffmpegProcess && ffmpegProcess.pid) {
+        try {
+          // send SIGTERM to the process group (negative pid) on POSIX systems
+          process.kill(-ffmpegProcess.pid, 'SIGTERM');
+          console.log(`[StreamingService] Sent SIGTERM to process group -${ffmpegProcess.pid}`);
+        } catch (pgErr) {
+          // Fallback to killing the child process directly
+          try {
+            ffmpegProcess.kill('SIGTERM');
+            console.log(`[StreamingService] Sent SIGTERM to process ${ffmpegProcess.pid}`);
+          } catch (childErr) {
+            console.error(`[StreamingService] Error sending SIGTERM to process: ${childErr.message}`);
+          }
+        }
+
+        // Wait briefly for process to exit, otherwise escalate to SIGKILL
+        const pidToCheck = ffmpegProcess.pid;
+        const waitUntil = Date.now() + 3000;
+        let stillAlive = true;
+        while (Date.now() < waitUntil) {
+          try {
+            process.kill(pidToCheck, 0);
+            // still alive
+            await new Promise(r => setTimeout(r, 300));
+          } catch (errCheck) {
+            // process does not exist
+            stillAlive = false;
+            break;
+          }
+        }
+        if (stillAlive) {
+          try {
+            process.kill(-pidToCheck, 'SIGKILL');
+            console.log(`[StreamingService] Escalated to SIGKILL for process group -${pidToCheck}`);
+          } catch (killAllErr) {
+            try {
+              ffmpegProcess.kill('SIGKILL');
+              console.log(`[StreamingService] Escalated to SIGKILL for process ${pidToCheck}`);
+            } catch (childKillErr) {
+              console.error(`[StreamingService] Failed to SIGKILL ffmpeg process: ${childKillErr.message}`);
+            }
+          }
+        }
+      } else {
+        // No PID available, attempt normal kill
+        ffmpegProcess.kill('SIGTERM');
+      }
     } catch (killError) {
       console.error(`[StreamingService] Error killing FFmpeg process: ${killError.message}`);
       manuallyStoppingStreams.delete(streamId);
@@ -445,8 +552,24 @@ async function syncStreamStatuses() {
       const isReallyActive = activeStreams.has(stream.id);
       if (!isReallyActive) {
         console.log(`[StreamingService] Found inconsistent stream ${stream.id}: marked as 'live' in DB but not active in memory`);
-        await Stream.updateStatus(stream.id, 'offline');
-        console.log(`[StreamingService] Updated stream ${stream.id} status to 'offline'`);
+        // Attempt to recover by restarting the stream
+        console.log(`[StreamingService] Attempting to recover stream ${stream.id}...`);
+        try {
+          const result = await startStream(stream.id);
+          if (result.success) {
+            console.log(`[StreamingService] Successfully recovered stream ${stream.id}`);
+          } else {
+            console.warn(`[StreamingService] Failed to recover stream ${stream.id}: ${result.error}`);
+            await Stream.updateStatus(stream.id, 'offline');
+          }
+        } catch (recoverErr) {
+          console.error(`[StreamingService] Error during recovery of stream ${stream.id}: ${recoverErr.message}`);
+          try {
+            await Stream.updateStatus(stream.id, 'offline');
+          } catch (statusErr) {
+            console.error(`[StreamingService] Error marking stream ${stream.id} offline: ${statusErr.message}`);
+          }
+        }
       }
     }
     const activeStreamIds = Array.from(activeStreams.keys());
@@ -477,6 +600,43 @@ async function syncStreamStatuses() {
   }
 }
 setInterval(syncStreamStatuses, 5 * 60 * 1000);
+// Monitor active ffmpeg processes and reconcile in-memory state with actual processes
+async function monitorActiveProcesses() {
+  try {
+    for (const [streamId, proc] of activeStreams.entries()) {
+      try {
+        if (!proc || !proc.pid) {
+          addStreamLog(streamId, 'Monitor: process missing or has no PID, cleaning up');
+          activeStreams.delete(streamId);
+          try { await Stream.updateStatus(streamId, 'offline'); } catch (e) { console.error('[StreamingService] Monitor updateStatus error:', e.message); }
+          continue;
+        }
+        // Check if process is alive
+        try {
+          process.kill(proc.pid, 0);
+          // alive
+        } catch (err) {
+          // process not alive
+          addStreamLog(streamId, `Monitor: process ${proc.pid} not found, cleaning up`);
+          console.log(`[StreamingService][Monitor] Process ${proc.pid} for stream ${streamId} not alive, removing from activeStreams`);
+          activeStreams.delete(streamId);
+          try {
+            await Stream.updateStatus(streamId, 'offline');
+          } catch (e) {
+            console.error('[StreamingService] Monitor updateStatus error:', e.message);
+          }
+        }
+      } catch (innerErr) {
+        console.error('[StreamingService] Error monitoring stream', streamId, innerErr.message || innerErr);
+      }
+    }
+  } catch (error) {
+    console.error('[StreamingService] monitorActiveProcesses error:', error.message || error);
+  }
+}
+
+// Run monitor every minute
+setInterval(monitorActiveProcesses, 60 * 1000);
 function isStreamActive(streamId) {
   return activeStreams.has(streamId);
 }

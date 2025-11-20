@@ -9,7 +9,7 @@ const fs = require('fs');
 const csrf = require('csrf');
 const { v4: uuidv4 } = require('uuid');
 const session = require('express-session');
-const SQLiteStore = require('connect-sqlite3')(session);
+const PgSession = require('connect-pg-simple')(session);
 const bcrypt = require('bcrypt');
 const { body, validationResult } = require('express-validator');
 const rateLimit = require('express-rate-limit');
@@ -106,21 +106,34 @@ app.locals.helpers = {
     return `${hours}:${minutes}:${secs}`;
   }
 };
+// Initialize session store with PostgreSQL
+const sessionStore = new PgSession({
+  pool: require('./db/database').pool,
+  tableName: 'user_sessions'
+});
+
+// Error handling for session store
+sessionStore.on('error', (err) => {
+  console.error('[SESSION STORE] Error:', err);
+});
+
+sessionStore.on('connect', () => {
+  console.log('[SESSION STORE] Connected to PostgreSQL');
+});
+
 app.use(session({
-  store: new SQLiteStore({
-    db: 'sessions.db',
-    dir: './db/',
-    table: 'sessions'
-  }),
-  secret: process.env.SESSION_SECRET,
+  store: sessionStore,
+  secret: process.env.SESSION_SECRET || 'fallback-secret-key-change-in-production',
   resave: false,
   saveUninitialized: false,
   rolling: true,
   cookie: {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    maxAge: 24 * 60 * 60 * 1000
-  }
+    secure: false,
+    maxAge: 24 * 60 * 60 * 1000,
+    sameSite: 'lax'
+  },
+  name: 'sessionId'
 }));
 app.use(async (req, res, next) => {
   if (req.session && req.session.userId) {
@@ -142,6 +155,19 @@ app.use(async (req, res, next) => {
     }
   }
   res.locals.req = req;
+  next();
+});
+
+// Debug middleware: Log session state on all requests
+app.use((req, res, next) => {
+  console.log('[SESSION DEBUG]', {
+    path: req.path,
+    method: req.method,
+    sessionId: req.sessionID,
+    userId: req.session?.userId,
+    username: req.session?.username,
+    cookieSecure: req.session?.cookie?.secure
+  });
   next();
 });
 app.use(function (req, res, next) {
@@ -232,7 +258,8 @@ app.use('/uploads/avatars', (req, res, next) => {
   }
 });
 const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
+  // windowMs: 15 * 60 * 1000,
+  windowMs: 0,
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
@@ -256,7 +283,9 @@ app.get('/login', async (req, res) => {
   }
   try {
     const usersExist = await checkIfUsersExist();
+    console.log('[DEBUG] /login - usersExist:', usersExist);
     if (!usersExist) {
+      console.log('[DEBUG] No users found, redirecting to /setup-account');
       return res.redirect('/setup-account');
     }
     res.render('login', {
@@ -274,15 +303,21 @@ app.get('/login', async (req, res) => {
 app.post('/login', loginDelayMiddleware, loginLimiter, async (req, res) => {
   const { username, password } = req.body;
   try {
+    console.log('[AUTH] Login attempt:', { username });
+    
     const user = await User.findByUsername(username);
     if (!user) {
+      console.warn('[AUTH] Login failed: user not found', { username });
       return res.render('login', {
         title: 'Login',
         error: 'Invalid username or password'
       });
     }
+    
+    console.log('[AUTH] User found, verifying password:', { username });
     const passwordMatch = await User.verifyPassword(password, user.password);
     if (!passwordMatch) {
+      console.warn('[AUTH] Login failed: password mismatch', { username });
       return res.render('login', {
         title: 'Login',
         error: 'Invalid username or password'
@@ -290,19 +325,51 @@ app.post('/login', loginDelayMiddleware, loginLimiter, async (req, res) => {
     }
     
     if (user.status !== 'active') {
+      console.warn('[AUTH] Login failed: account not active', { username, status: user.status });
       return res.render('login', {
         title: 'Login',
         error: 'Your account is not active. Please contact administrator for activation.'
       });
     }
     
+    // Set session data
     req.session.userId = user.id;
     req.session.username = user.username;
     req.session.avatar_path = user.avatar_path;
     req.session.user_role = user.user_role;
-    res.redirect('/dashboard');
+    
+    console.log('[AUTH] Session set before save:', {
+      sessionId: req.sessionID,
+      userId: req.session.userId,
+      username: req.session.username
+    });
+    
+    // Save session to PostgreSQL BEFORE redirecting
+    req.session.save((err) => {
+      if (err) {
+        console.error('[AUTH] Session save error:', err);
+        return res.render('login', {
+          title: 'Login',
+          error: 'Failed to save session. Please try again.'
+        });
+      }
+      
+      console.log('[AUTH] Session saved to PostgreSQL:', {
+        sessionId: req.sessionID,
+        userId: req.session.userId
+      });
+      
+      console.log('[AUTH] Login successful:', { username, userId: user.id, role: user.user_role });
+      res.redirect('/dashboard');
+    });
+    
   } catch (error) {
-    console.error('Login error:', error);
+    console.error('[AUTH] Login error - Details:', {
+      message: error.message,
+      code: error.code,
+      detail: error.detail,
+      stack: error.stack
+    });
     res.render('login', {
       title: 'Login',
       error: 'An error occurred during login. Please try again.'
@@ -342,7 +409,10 @@ app.post('/signup', upload.single('avatar'), async (req, res) => {
   const { username, password, confirmPassword, user_role, status } = req.body;
   
   try {
+    console.log('[AUTH] Sign up attempt:', { username, hasPassword: !!password, hasAvatar: !!req.file });
+    
     if (!username || !password) {
+      console.warn('[AUTH] Sign up validation failed: missing username or password');
       return res.render('signup', {
         title: 'Sign Up',
         error: 'Username and password are required',
@@ -351,6 +421,7 @@ app.post('/signup', upload.single('avatar'), async (req, res) => {
     }
 
     if (password !== confirmPassword) {
+      console.warn('[AUTH] Sign up validation failed: passwords do not match');
       return res.render('signup', {
         title: 'Sign Up',
         error: 'Passwords do not match',
@@ -359,6 +430,7 @@ app.post('/signup', upload.single('avatar'), async (req, res) => {
     }
 
     if (password.length < 6) {
+      console.warn('[AUTH] Sign up validation failed: password too short');
       return res.render('signup', {
         title: 'Sign Up',
         error: 'Password must be at least 6 characters long',
@@ -366,8 +438,10 @@ app.post('/signup', upload.single('avatar'), async (req, res) => {
       });
     }
 
+    console.log('[AUTH] Checking if username exists:', username);
     const existingUser = await User.findByUsername(username);
     if (existingUser) {
+      console.warn('[AUTH] Sign up failed: username already exists');
       return res.render('signup', {
         title: 'Sign Up',
         error: 'Username already exists',
@@ -378,23 +452,27 @@ app.post('/signup', upload.single('avatar'), async (req, res) => {
     let avatarPath = null;
     if (req.file) {
       avatarPath = `/uploads/avatars/${req.file.filename}`;
+      console.log('[AUTH] Avatar uploaded:', avatarPath);
     }
 
+    console.log('[AUTH] Creating user:', username);
     const newUser = await User.create({
       username,
       password,
       avatar_path: avatarPath,
       user_role: user_role || 'member',
-      status: status || 'inactive'
+      status: status || 'active'
     });
 
     if (newUser) {
+      console.log('[AUTH] User created successfully:', { id: newUser.id, username: newUser.username });
       return res.render('signup', {
         title: 'Sign Up',
         error: null,
         success: 'Account created successfully! Please wait for admin approval to activate your account.'
       });
     } else {
+      console.error('[AUTH] User.create returned falsy value');
       return res.render('signup', {
         title: 'Sign Up',
         error: 'Failed to create account. Please try again.',
@@ -402,7 +480,13 @@ app.post('/signup', upload.single('avatar'), async (req, res) => {
       });
     }
   } catch (error) {
-    console.error('Signup error:', error);
+    console.error('[AUTH] Signup error - Details:', {
+      message: error.message,
+      code: error.code,
+      detail: error.detail,
+      hint: error.hint,
+      stack: error.stack
+    });
     return res.render('signup', {
       title: 'Sign Up',
       error: 'An error occurred during registration. Please try again.',
@@ -487,7 +571,20 @@ app.post('/setup-account', upload.single('avatar'), [
         }
         console.log('Setup account - Using user ID from database:', user.id);
         console.log('Setup account - Session userId set to:', req.session.userId);
-        return res.redirect('/dashboard');
+        
+        // Save session to PostgreSQL before redirecting
+        req.session.save((err) => {
+          if (err) {
+            console.error('Setup account - Session save error:', err);
+            return res.render('setup-account', {
+              title: 'Complete Your Account',
+              user: {},
+              error: 'Failed to save session. Please try again.'
+            });
+          }
+          console.log('Setup account - Session saved:', { userId: req.session.userId });
+          res.redirect('/dashboard');
+        });
       } catch (error) {
         console.error('User creation error:', error);
         return res.render('setup-account', {
@@ -506,7 +603,19 @@ app.post('/setup-account', upload.single('avatar'), [
       if (avatarPath) {
         req.session.avatar_path = avatarPath;
       }
-      res.redirect('/dashboard');
+      
+      // Save session before redirect
+      req.session.save((err) => {
+        if (err) {
+          console.error('Setup account - Session save error:', err);
+          return res.render('setup-account', {
+            title: 'Complete Your Account',
+            user: { username: req.body.username },
+            error: 'Failed to save session. Please try again.'
+          });
+        }
+        res.redirect('/dashboard');
+      });
     }
   } catch (error) {
     console.error('Account setup error:', error);
@@ -569,11 +678,7 @@ app.get('/history', isAuthenticated, async (req, res) => {
     const db = require('./db/database').db;
     const history = await new Promise((resolve, reject) => {
       db.all(
-        `SELECT h.*, v.thumbnail_path 
-         FROM stream_history h 
-         LEFT JOIN videos v ON h.video_id = v.id 
-         WHERE h.user_id = ? 
-         ORDER BY h.start_time DESC`,
+        `SELECT h.*, h.end_time AS stop_time, v.thumbnail_path FROM stream_history h LEFT JOIN videos v ON h.video_id = v.id WHERE h.user_id = $1 ORDER BY h.start_time DESC`,
         [req.session.userId],
         (err, rows) => {
           if (err) reject(err);
@@ -639,42 +744,28 @@ app.delete('/api/history/:id', isAuthenticated, async (req, res) => {
 app.get('/users', isAdmin, async (req, res) => {
   try {
     const users = await User.findAll();
-    
+    const { query } = require('./db/database'); // Import the query function
+
     const usersWithStats = await Promise.all(users.map(async (user) => {
-      const videoStats = await new Promise((resolve, reject) => {
-        db.get(
-          `SELECT COUNT(*) as count, COALESCE(SUM(file_size), 0) as totalSize 
-           FROM videos WHERE user_id = ?`,
-          [user.id],
-          (err, row) => {
-            if (err) reject(err);
-            else resolve(row);
-          }
-        );
-      });
-      
-      const streamStats = await new Promise((resolve, reject) => {
-         db.get(
-           `SELECT COUNT(*) as count FROM streams WHERE user_id = ?`,
-           [user.id],
-           (err, row) => {
-             if (err) reject(err);
-             else resolve(row);
-           }
-         );
-       });
-       
-       const activeStreamStats = await new Promise((resolve, reject) => {
-         db.get(
-           `SELECT COUNT(*) as count FROM streams WHERE user_id = ? AND status = 'live'`,
-           [user.id],
-           (err, row) => {
-             if (err) reject(err);
-             else resolve(row);
-           }
-         );
-       });
-      
+      const videoStatsResult = await query(
+        `SELECT COUNT(*) as count, COALESCE(SUM(file_size), 0) as "totalSize"
+         FROM videos WHERE user_id = $1`,
+        [user.id]
+      );
+      const videoStats = videoStatsResult.rows[0] || { count: 0, totalSize: 0 };
+
+      const streamStatsResult = await query(
+        `SELECT COUNT(*) as count FROM streams WHERE user_id = $1`,
+        [user.id]
+      );
+      const streamStats = streamStatsResult.rows[0] || { count: 0 };
+
+      const activeStreamStatsResult = await query(
+        `SELECT COUNT(*) as count FROM streams WHERE user_id = $1 AND status = 'live'`,
+        [user.id]
+      );
+      const activeStreamStats = activeStreamStatsResult.rows[0] || { count: 0 };
+
       const formatFileSize = (bytes) => {
         if (bytes === 0) return '0 B';
         const k = 1024;
@@ -682,16 +773,16 @@ app.get('/users', isAdmin, async (req, res) => {
         const i = Math.floor(Math.log(bytes) / Math.log(k));
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
       };
-      
+
       return {
          ...user,
-         videoCount: videoStats.count,
-         totalVideoSize: videoStats.totalSize > 0 ? formatFileSize(videoStats.totalSize) : null,
-         streamCount: streamStats.count,
-         activeStreamCount: activeStreamStats.count
-       };
+         videoCount: parseInt(videoStats.count),
+         totalVideoSize: videoStats.totalSize > 0 ? formatFileSize(parseInt(videoStats.totalSize)) : null,
+         streamCount: parseInt(streamStats.count),
+         activeStreamCount: parseInt(activeStreamStats.count)
+      };
     }));
-    
+
     res.render('users', {
       title: 'User Management',
       active: 'users',
@@ -704,6 +795,29 @@ app.get('/users', isAdmin, async (req, res) => {
       title: 'Error',
       message: 'Failed to load users page',
       user: req.user
+    });
+  }
+});
+
+app.get('/channels', isAuthenticated, async (req, res) => {
+  try {
+    const Channel = require('./models/Channel');
+    const User = require('./models/User'); // Import User model
+    const channels = await Channel.findByUserId(req.session.userId);
+
+    res.render('channels', {
+      title: 'Channel Management',
+      active: 'channels',
+      channels: channels,
+      user: await User.findById(req.session.userId)
+    });
+  } catch (error) {
+    console.error('Channels page error:', error);
+    const User = require('./models/User'); // Import User model for error handling
+    res.status(500).render('error', {
+      title: 'Error',
+      message: 'Failed to load channels page',
+      user: await User.findById(req.session.userId)
     });
   }
 });
@@ -1269,6 +1383,27 @@ app.post('/api/videos/upload', isAuthenticated, (req, res, next) => {
                 user_id: req.session.userId
               };
               const video = await Video.create(videoData);
+              // Attempt to upload video and thumbnail to MinIO for durable storage (non-fatal)
+              try {
+                const minioClient = require('./config/minio');
+                const objectName = `videos/${req.file.filename}`;
+                await minioClient.uploadFile(fullFilePath, objectName, req.file.mimetype);
+                console.log(`[Upload] Video uploaded to MinIO as ${objectName}`);
+
+                // Upload thumbnail if it exists
+                try {
+                  if (fs.existsSync(fullThumbnailPath)) {
+                    const thumbObject = `thumbnails/${thumbnailFilename}`;
+                    await minioClient.uploadFile(fullThumbnailPath, thumbObject, 'image/jpeg');
+                    console.log(`[Upload] Thumbnail uploaded to MinIO as ${thumbObject}`);
+                  }
+                } catch (thumbErr) {
+                  console.warn('[Upload] Failed to upload thumbnail to MinIO:', thumbErr.message || thumbErr);
+                }
+              } catch (minioErr) {
+                console.warn('[Upload] Failed to upload video to MinIO (continuing):', minioErr.message || minioErr);
+              }
+
               res.json({
                 success: true,
                 message: 'Video uploaded successfully',
@@ -1633,7 +1768,166 @@ app.get('/api/stream/content', isAuthenticated, async (req, res) => {
   }
 });
 const Stream = require('./models/Stream');
+const Channel = require('./models/Channel');
 const { title } = require('process');
+
+// ============================================
+// CHANNEL API ROUTES
+// ============================================
+
+// Get all channels for user
+app.get('/api/channels', isAuthenticated, async (req, res) => {
+  try {
+    if (!req.session.userId) {
+      console.error('No userId in session');
+      return res.status(401).json({ success: false, error: 'Not authenticated' });
+    }
+    
+    const channels = await Channel.findByUserId(req.session.userId);
+    res.json({ success: true, channels: channels || [] });
+  } catch (error) {
+    console.error('Error fetching channels:', error);
+    console.error('Error stack:', error.stack);
+    return res.status(500).json({ success: false, error: 'Failed to fetch channels', details: error.message });
+  }
+});
+
+// Get active channels for user
+app.get('/api/channels/active', isAuthenticated, async (req, res) => {
+  try {
+    const channels = await Channel.findActiveByUserId(req.session.userId);
+    res.json({ success: true, channels });
+  } catch (error) {
+    console.error('Error fetching active channels:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch active channels' });
+  }
+});
+
+// Get single channel
+app.get('/api/channels/:id', isAuthenticated, async (req, res) => {
+  try {
+    const channel = await Channel.findById(req.params.id);
+    
+    if (!channel) {
+      return res.status(404).json({ success: false, error: 'Channel not found' });
+    }
+    
+    if (channel.user_id !== req.session.userId) {
+      return res.status(403).json({ success: false, error: 'Not authorized to access this channel' });
+    }
+    
+    res.json({ success: true, channel });
+  } catch (error) {
+    console.error('Error fetching channel:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch channel' });
+  }
+});
+
+// Create new channel
+app.post('/api/channels', isAuthenticated, [
+  body('name').trim().isLength({ min: 1 }).withMessage('Channel name is required'),
+  body('rtmp_url').trim().isLength({ min: 1 }).withMessage('RTMP URL is required'),
+  body('stream_key').trim().isLength({ min: 1 }).withMessage('Stream key is required')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, error: errors.array()[0].msg });
+    }
+
+    const channelData = {
+      user_id: req.session.userId,
+      name: req.body.name,
+      platform: req.body.platform || 'Custom',
+      platform_icon: req.body.platform_icon || 'ti-broadcast',
+      rtmp_url: req.body.rtmp_url,
+      stream_key: req.body.stream_key,
+      is_active: req.body.is_active !== undefined ? req.body.is_active : true
+    };
+
+    const channel = await Channel.create(channelData);
+    res.json({ success: true, channel });
+  } catch (error) {
+    console.error('Error creating channel:', error);
+    res.status(500).json({ success: false, error: 'Failed to create channel' });
+  }
+});
+
+// Update channel
+app.put('/api/channels/:id', isAuthenticated, async (req, res) => {
+  try {
+    const channel = await Channel.findById(req.params.id);
+    
+    if (!channel) {
+      return res.status(404).json({ success: false, error: 'Channel not found' });
+    }
+    
+    if (channel.user_id !== req.session.userId) {
+      return res.status(403).json({ success: false, error: 'Not authorized to update this channel' });
+    }
+
+    const updateData = {};
+    if (req.body.name) updateData.name = req.body.name;
+    if (req.body.platform) updateData.platform = req.body.platform;
+    if (req.body.platform_icon) updateData.platform_icon = req.body.platform_icon;
+    if (req.body.rtmp_url) updateData.rtmp_url = req.body.rtmp_url;
+    if (req.body.stream_key) updateData.stream_key = req.body.stream_key;
+    if (req.body.is_active !== undefined) updateData.is_active = req.body.is_active;
+
+    const updatedChannel = await Channel.update(req.params.id, updateData);
+    res.json({ success: true, channel: updatedChannel });
+  } catch (error) {
+    console.error('Error updating channel:', error);
+    res.status(500).json({ success: false, error: 'Failed to update channel' });
+  }
+});
+
+// Toggle channel active status
+app.post('/api/channels/:id/toggle', isAuthenticated, async (req, res) => {
+  try {
+    const channel = await Channel.findById(req.params.id);
+    
+    if (!channel) {
+      return res.status(404).json({ success: false, error: 'Channel not found' });
+    }
+    
+    if (channel.user_id !== req.session.userId) {
+      return res.status(403).json({ success: false, error: 'Not authorized' });
+    }
+
+    const updatedChannel = await Channel.toggleActive(req.params.id, req.session.userId);
+    res.json({ success: true, channel: updatedChannel });
+  } catch (error) {
+    console.error('Error toggling channel:', error);
+    res.status(500).json({ success: false, error: 'Failed to toggle channel' });
+  }
+});
+
+// Delete channel
+app.delete('/api/channels/:id', isAuthenticated, async (req, res) => {
+  try {
+    const channel = await Channel.findById(req.params.id);
+    
+    if (!channel) {
+      return res.status(404).json({ success: false, error: 'Channel not found' });
+    }
+    
+    if (channel.user_id !== req.session.userId) {
+      return res.status(403).json({ success: false, error: 'Not authorized to delete this channel' });
+    }
+
+    await Channel.delete(req.params.id, req.session.userId);
+    res.json({ success: true, message: 'Channel deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting channel:', error);
+    res.status(500).json({ success: false, error: 'Failed to delete channel' });
+  }
+});
+
+// ============================================
+// STREAM API ROUTES (Updated for multi-channel)
+// ============================================
+
 app.get('/api/streams', isAuthenticated, async (req, res) => {
   try {
     const filter = req.query.filter;
@@ -1708,6 +2002,10 @@ app.post('/api/streams', isAuthenticated, [
     if (req.body.duration) {
       streamData.duration = parseInt(req.body.duration);
     }
+    if (req.body.recurrenceType) {
+      streamData.recurrence_type = req.body.recurrenceType;
+      streamData.recurrence_value = req.body.recurrenceValue || null;
+    }
     streamData.status = req.body.scheduleTime ? 'scheduled' : 'offline';
     const stream = await Stream.create(streamData);
     res.json({ success: true, stream });
@@ -1754,6 +2052,10 @@ app.put('/api/streams/:id', isAuthenticated, async (req, res) => {
     }
     if (req.body.useAdvancedSettings !== undefined) {
       updateData.use_advanced_settings = req.body.useAdvancedSettings === 'true' || req.body.useAdvancedSettings === true;
+    }
+    if (req.body.recurrenceType !== undefined) {
+      updateData.recurrence_type = req.body.recurrenceType || null;
+      updateData.recurrence_value = req.body.recurrenceValue || null;
     }
     if (req.body.scheduleTime) {
       const scheduleDate = new Date(req.body.scheduleTime);
@@ -1812,13 +2114,21 @@ app.post('/api/streams/:id/status', isAuthenticated, [
     }
     const newStatus = req.body.status;
     if (newStatus === 'live') {
-      if (stream.status === 'live') {
+      // If process is already active in memory, treat as idempotent success
+      if (streamingService.isStreamActive(streamId)) {
+        const updatedStream = await Stream.getStreamWithVideo(streamId);
         return res.json({
-          success: false,
-          error: 'Stream is already live',
-          stream
+          success: true,
+          stream: updatedStream,
+          message: 'Stream is already active'
         });
       }
+
+      // If DB marks stream as live but process not active, attempt to start as a recovery
+      if (stream.status === 'live') {
+        console.log(`[STREAM API] Stream ${streamId} marked 'live' in DB but no active process found. Attempting to start process.`);
+      }
+
       if (!stream.video_id) {
         return res.json({
           success: false,
@@ -1826,6 +2136,7 @@ app.post('/api/streams/:id/status', isAuthenticated, [
           stream
         });
       }
+
       const result = await streamingService.startStream(streamId);
       if (result.success) {
         const updatedStream = await Stream.getStreamWithVideo(streamId);
@@ -1835,6 +2146,11 @@ app.post('/api/streams/:id/status', isAuthenticated, [
           isAdvancedMode: result.isAdvancedMode
         });
       } else {
+        // If start failed because the service says stream is already active, return idempotent success
+        if (result.error && result.error.toLowerCase().includes('already')) {
+          const updatedStream = await Stream.getStreamWithVideo(streamId);
+          return res.json({ success: true, stream: updatedStream, message: 'Stream already active' });
+        }
         return res.status(500).json({
           success: false,
           error: result.error || 'Failed to start stream'
@@ -1858,7 +2174,7 @@ app.post('/api/streams/:id/status', isAuthenticated, [
         console.log(`Scheduled stream ${streamId} was cancelled`);
       }
       const result = await Stream.updateStatus(streamId, 'offline', req.session.userId);
-      if (!result.updated) {
+      if (!result) {
         return res.status(404).json({
           success: false,
           error: 'Stream not found or not updated'
@@ -1867,7 +2183,7 @@ app.post('/api/streams/:id/status', isAuthenticated, [
       return res.json({ success: true, stream: result });
     } else {
       const result = await Stream.updateStatus(streamId, newStatus, req.session.userId);
-      if (!result.updated) {
+      if (!result) {
         return res.status(404).json({
           success: false,
           error: 'Stream not found or not updated'
@@ -1941,6 +2257,40 @@ app.get('/playlist', isAuthenticated, async (req, res) => {
   } catch (error) {
     console.error('Playlist error:', error);
     res.redirect('/dashboard');
+  }
+});
+
+// Individual playlist detail route
+app.get('/playlist/:id', isAuthenticated, async (req, res) => {
+  try {
+    const playlist = await Playlist.findByIdWithVideos(req.params.id);
+    if (!playlist) {
+      return res.status(404).render('error', {
+        title: 'Playlist Not Found',
+        message: 'The playlist you are looking for does not exist.'
+      });
+    }
+    if (playlist.user_id !== req.session.userId) {
+      return res.status(403).render('error', {
+        title: 'Access Denied',
+        message: 'You do not have permission to access this playlist.'
+      });
+    }
+    
+    const user = await User.findById(req.session.userId);
+    res.render('playlist-detail', {
+      title: playlist.name,
+      active: 'playlist',
+      user: user,
+      playlist: playlist,
+      videos: playlist.videos || []
+    });
+  } catch (error) {
+    console.error('Error fetching playlist detail:', error);
+    res.status(500).render('error', {
+      title: 'Error',
+      message: 'Failed to load playlist.'
+    });
   }
 });
 
@@ -2164,7 +2514,7 @@ app.get('/api/server-time', (req, res) => {
 });
 const server = app.listen(port, '0.0.0.0', async () => {
   const ipAddresses = getLocalIpAddresses();
-  console.log(`StreamFlow running at:`);
+  console.log(`manyustream running at:`);
   if (ipAddresses && ipAddresses.length > 0) {
     ipAddresses.forEach(ip => {
       console.log(`  http://${ip}:${port}`);

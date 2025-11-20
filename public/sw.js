@@ -92,15 +92,38 @@ self.addEventListener('fetch', (event) => {
 });
 
 function isStaticResource(url) {
-  return STATIC_RESOURCES.some(resource => url.includes(resource.replace(/^\
-         url.includes('tabler-icons') ||
-         url.includes('cdn.jsdelivr.net') ||
-         url.endsWith('.css') ||
-         url.endsWith('.js') ||
-         url.endsWith('.woff2') ||
-         url.endsWith('.woff') ||
-         url.endsWith('.ttf') ||
-         url.endsWith('.svg');
+  try {
+    const parsed = new URL(String(url));
+    const protocol = parsed.protocol;
+    // Only consider http(s) resources for caching
+    if (protocol !== 'http:' && protocol !== 'https:') return false;
+  } catch (e) {
+    // If URL parsing fails, don't treat as static
+    return false;
+  }
+
+  const lower = String(url).toLowerCase();
+
+  // Direct match against known static resources list
+  for (const resource of STATIC_RESOURCES) {
+    if (!resource) continue;
+    const r = resource.toLowerCase();
+    // If resource is a full URL, check if it's included in the request URL
+    if (r.startsWith('http')) {
+      if (lower.includes(r)) return true;
+    } else {
+      // Otherwise check for path suffix or inclusion
+      if (lower.endsWith(r) || lower.includes(r)) return true;
+    }
+  }
+
+  // Fallback checks for common CDN/asset patterns and extensions
+  if (lower.includes('tabler-icons') || lower.includes('cdn.jsdelivr.net')) return true;
+  if (lower.endsWith('.css') || lower.endsWith('.js') || lower.endsWith('.woff2') || lower.endsWith('.woff') || lower.endsWith('.ttf') || lower.endsWith('.svg') || lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {
+    return true;
+  }
+
+  return false;
 }
 
 self.addEventListener('message', (event) => {

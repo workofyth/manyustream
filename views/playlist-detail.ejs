@@ -1,0 +1,206 @@
+<% layout('layout') -%>
+
+<!-- Page Heading with Back Button -->
+<div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+  <div class="flex items-center gap-3">
+    <a href="/playlist" class="flex items-center justify-center w-10 h-10 rounded-lg bg-gray-100 dark:bg-meta-4 hover:bg-gray-200 dark:hover:bg-meta-3 transition-colors">
+      <i class="ti ti-arrow-left text-lg text-black dark:text-white"></i>
+    </a>
+    <div>
+      <h2 class="text-title-md2 font-semibold text-black dark:text-white">
+        <%= playlist.name %>
+      </h2>
+      <p class="text-sm text-bodydark mt-1">
+        <%= playlist.description || 'No description' %>
+      </p>
+    </div>
+  </div>
+  
+  <div class="flex items-center gap-2">
+    <button onclick="editPlaylist('<%= playlist.id %>')"
+      class="inline-flex items-center justify-center gap-2 rounded-md bg-meta-3 py-2 px-4 text-white hover:bg-opacity-90">
+      <i class="ti ti-pencil"></i>
+      <span>Edit</span>
+    </button>
+    <button onclick="deletePlaylist('<%= playlist.id %>', '<%= playlist.name %>')"
+      class="inline-flex items-center justify-center gap-2 rounded-md bg-meta-1 py-2 px-4 text-white hover:bg-opacity-90">
+      <i class="ti ti-trash"></i>
+      <span>Delete</span>
+    </button>
+  </div>
+</div>
+
+<!-- Playlist Info Bar -->
+<div class="rounded-sm border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark p-6 mb-6">
+  <div class="flex flex-wrap items-center gap-6">
+    <div class="flex items-center gap-3">
+      <div class="flex items-center justify-center w-12 h-12 rounded-lg bg-primary bg-opacity-10">
+        <i class="ti ti-playlist text-primary text-xl"></i>
+      </div>
+      <div>
+        <p class="text-sm text-bodydark">Total Videos</p>
+        <h4 class="text-title-sm font-semibold text-black dark:text-white">
+          <%= (videos && videos.length) || 0 %>
+        </h4>
+      </div>
+    </div>
+    
+    <div class="flex items-center gap-3">
+      <div class="flex items-center justify-center w-12 h-12 rounded-lg bg-meta-5 bg-opacity-10">
+        <i class="ti ti-<%= (playlist.is_shuffle) ? 'arrows-shuffle' : 'list-numbers' %> text-meta-5 text-xl"></i>
+      </div>
+      <div>
+        <p class="text-sm text-bodydark">Playback Mode</p>
+        <h4 class="text-title-sm font-semibold text-black dark:text-white">
+          <%= (playlist.is_shuffle) ? 'Shuffle' : 'Sequential' %>
+        </h4>
+      </div>
+    </div>
+    
+    <div class="flex items-center gap-3">
+      <div class="flex items-center justify-center w-12 h-12 rounded-lg bg-meta-6 bg-opacity-10">
+        <i class="ti ti-calendar text-meta-6 text-xl"></i>
+      </div>
+      <div>
+        <p class="text-sm text-bodydark">Created</p>
+        <h4 class="text-title-sm font-semibold text-black dark:text-white">
+          <%= new Date(playlist.created_at).toLocaleDateString() %>
+        </h4>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Videos in Playlist -->
+<div class="rounded-sm border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
+  <div class="border-b border-stroke px-4 py-6 dark:border-strokedark sm:px-6">
+    <h3 class="font-medium text-black dark:text-white">
+      Videos in Playlist
+    </h3>
+  </div>
+  
+  <div class="max-w-full overflow-x-auto">
+    <% if (videos && videos.length > 0) { %>
+      <table class="w-full table-auto">
+        <thead>
+          <tr class="bg-gray-2 text-left dark:bg-meta-4">
+            <th class="min-w-[220px] px-4 py-4 font-medium text-black dark:text-white xl:pl-11">
+              Video Title
+            </th>
+            <th class="min-w-[150px] px-4 py-4 font-medium text-black dark:text-white">
+              Duration
+            </th>
+            <th class="min-w-[120px] px-4 py-4 font-medium text-black dark:text-white">
+              Size
+            </th>
+            <th class="min-w-[100px] px-4 py-4 font-medium text-black dark:text-white">
+              Status
+            </th>
+            <th class="px-4 py-4 font-medium text-black dark:text-white">
+              Actions
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <% videos.forEach(function(video, index) { %>
+            <tr class="border-b border-stroke dark:border-strokedark">
+              <td class="px-4 py-5 pl-9 dark:text-white xl:pl-11">
+                <div class="flex items-center gap-3">
+                  <div class="flex items-center justify-center w-12 h-12 rounded bg-bodydark2 dark:bg-meta-4 flex-shrink-0 overflow-hidden">
+                    <img src="<%= video.thumbnail_path || '/images/default-thumbnail.jpg' %>" alt="<%= video.title %>" 
+                      class="w-full h-full object-cover" onerror="this.src='/images/default-thumbnail.jpg'">
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <h5 class="font-medium text-black dark:text-white truncate">
+                      <%= video.title %>
+                    </h5>
+                    <p class="text-sm text-bodydark truncate">
+                      <%= video.description || 'No description' %>
+                    </p>
+                  </div>
+                </div>
+              </td>
+              <td class="px-4 py-5 dark:text-white">
+                <p><%= video.duration || '-' %></p>
+              </td>
+              <td class="px-4 py-5 dark:text-white">
+                <p><%= video.size || '-' %></p>
+              </td>
+              <td class="px-4 py-5">
+                <span class="inline-flex rounded-full bg-opacity-10 py-1 px-3 text-sm font-medium <%= video.status === 'ready' ? 'bg-success text-success' : 'bg-warning text-warning' %>">
+                  <%= video.status || 'unknown' %>
+                </span>
+              </td>
+              <td class="px-4 py-5">
+                <div class="flex items-center space-x-3.5">
+                  <button class="hover:text-primary transition-colors" onclick="playVideo('<%= video.id %>', '<%= index + 1 %>')">
+                    <i class="ti ti-player-play"></i>
+                  </button>
+                  <button class="hover:text-danger transition-colors" onclick="removeVideoFromPlaylist('<%= video.id %>', '<%= video.title %>')">
+                    <i class="ti ti-trash"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          <% }); %>
+        </tbody>
+      </table>
+    <% } else { %>
+      <div class="px-4 py-12 text-center dark:text-white">
+        <div class="flex flex-col items-center justify-center">
+          <i class="ti ti-video-off text-6xl text-bodydark mb-4"></i>
+          <h3 class="mb-2 text-xl font-semibold text-black dark:text-white">No Videos in Playlist</h3>
+          <p class="mb-6 text-bodydark">This playlist is empty. Add videos to get started.</p>
+          <a href="/playlist" class="inline-flex items-center justify-center gap-2 rounded-md bg-primary py-2.5 px-6 text-center font-medium text-white hover:bg-opacity-90">
+            <i class="ti ti-arrow-left"></i>
+            <span>Back to Playlists</span>
+          </a>
+        </div>
+      </div>
+    <% } %>
+  </div>
+</div>
+
+<script>
+function playVideo(videoId, position) {
+  console.log('Playing video:', videoId, 'Position:', position);
+  // TODO: Implement video player modal or redirect to video player
+  // For now, just show alert
+  alert('Playing video ' + position + ' from playlist');
+}
+
+function removeVideoFromPlaylist(videoId, videoTitle) {
+  if (confirm('Remove "' + videoTitle + '" from this playlist?')) {
+    // TODO: Implement remove video from playlist
+    console.log('Removing video from playlist:', videoId);
+    // Send DELETE request to /api/playlists/:playlistId/videos/:videoId
+  }
+}
+
+function editPlaylist(id) {
+  // Redirect to playlist page with edit mode or open a modal
+  // For now, redirect to the playlist list where edit modal can be opened
+  window.location.href = '/playlist';
+}
+
+function deletePlaylist(id, name) {
+  if (confirm('Are you sure you want to delete "' + name + '"? This action cannot be undone.')) {
+    fetch(`/api/playlists/${id}`, {
+      method: 'DELETE'
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        alert('Playlist deleted successfully');
+        window.location.href = '/playlist';
+      } else {
+        alert('Error: ' + (data.error || 'Failed to delete playlist'));
+      }
+    })
+    .catch(error => {
+      console.error('Error deleting playlist:', error);
+      alert('Error deleting playlist');
+    });
+  }
+}
+</script>
