@@ -24,25 +24,42 @@ class Stream {
       user_id
     } = streamData;
 
+    // Validate and format resolution before saving to database
+    const formattedResolution = Stream.validateAndFormatResolution(resolution);
+
     const client = await pool.connect();
-    
+
     try {
       await client.query('BEGIN');
 
+      // Check for duplicate streams with same rtmp_url and stream_key for the same user
+      const duplicateCheck = await client.query(
+        `SELECT id FROM streams
+         WHERE user_id = $1::uuid
+         AND rtmp_url = $2
+         AND stream_key = $3
+         AND title = $4`,
+        [user_id, rtmp_url, stream_key, title]
+      );
+
+      if (duplicateCheck.rows.length > 0) {
+        throw new Error('A stream with the same title, RTMP URL, and stream key already exists');
+      }
+
       const status = schedule_time ? 'scheduled' : 'offline';
-      
+
       // Create stream with rtmp_url, stream_key, platform
       const streamResult = await client.query(
         `INSERT INTO streams (
           title, video_id, rtmp_url, stream_key, platform, platform_icon,
           bitrate, resolution, fps, orientation, loop_video,
-          schedule_time, recurrence_type, recurrence_value, duration, 
+          schedule_time, recurrence_type, recurrence_value, duration,
           status, use_advanced_settings, user_id
         ) VALUES ($1, $2::uuid, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18::uuid)
         RETURNING *`,
         [
           title, video_id, rtmp_url, stream_key, platform, platform_icon,
-          bitrate, resolution, fps, orientation, loop_video,
+          bitrate, formattedResolution, fps, orientation, loop_video,
           schedule_time, recurrence_type, recurrence_value, duration,
           status, use_advanced_settings, user_id
         ]
@@ -75,6 +92,63 @@ class Stream {
     } finally {
       client.release();
     }
+  }
+
+  static validateAndFormatResolution(resolution) {
+    // Common resolution patterns
+    const commonResolutions = {
+      '720': '1280x720',
+      '480': '854x480',
+      '360': '640x360',
+      '1080': '1920x1080',
+      '4k': '3840x2160',
+      '2160': '3840x2160',
+      '1440': '2560x1440'
+    };
+
+    if (!resolution) {
+      return '1280x720'; // default
+    }
+
+    if (typeof resolution !== 'string') {
+      resolution = String(resolution);
+    }
+
+    // Check if it's a common resolution format like "720" or "1080"
+    if (commonResolutions[resolution.toLowerCase()]) {
+      return commonResolutions[resolution.toLowerCase()];
+    }
+
+    // If it's already in the format "WIDTHxHEIGHT", validate it
+    const resolutionRegex = /^(\d+)x(\d+)$|^(hd|fhd|uhd|4k)$/;
+    if (resolutionRegex.test(resolution.toLowerCase())) {
+      return resolution.toLowerCase() === 'hd' ? '1280x720' :
+             resolution.toLowerCase() === 'fhd' ? '1920x1080' :
+             resolution.toLowerCase() === 'uhd' ? '3840x2160' :
+             resolution.toLowerCase() === '4k' ? '3840x2160' : resolution;
+    }
+
+    // If it's just a number followed by p, convert to standard format
+    const heightRegex = /^(\d+)p?$/;
+    const match = resolution.match(heightRegex);
+    if (match) {
+      const height = parseInt(match[1]);
+      switch(height) {
+        case 360: return '640x360';
+        case 480: return '854x480';
+        case 720: return '1280x720';
+        case 1080: return '1920x1080';
+        case 1440: return '2560x1440';
+        case 2160: return '3840x2160';
+        default:
+          // For other heights, calculate width based on 16:9 aspect ratio
+          const width = Math.round(height * 16 / 9);
+          return `${width}x${height}`;
+      }
+    }
+
+    // If none of the above, return default
+    return '1280x720';
   }
 
   static async findById(id) {
@@ -143,10 +217,10 @@ class Stream {
 
   static async update(id, streamData) {
     const client = await pool.connect();
-    
+
     try {
       await client.query('BEGIN');
-      
+
       const fields = [];
       const values = [];
       let paramCount = 1;
@@ -155,7 +229,11 @@ class Stream {
       const channelIds = streamData.channelIds;
       delete streamData.channelIds;
 
+      // Process stream data, formatting resolution if present
       Object.entries(streamData).forEach(([key, value]) => {
+        if (key === 'resolution') {
+          value = Stream.validateAndFormatResolution(value);
+        }
         fields.push(`${key} = $${paramCount}`);
         values.push(value);
         paramCount++;
@@ -172,7 +250,7 @@ class Stream {
       if (channelIds !== undefined) {
         // Remove existing links
         await client.query('DELETE FROM stream_channels WHERE stream_id = $1::uuid', [id]);
-        
+
         // Add new links
         if (channelIds && channelIds.length > 0) {
           for (const channelId of channelIds) {
@@ -186,7 +264,7 @@ class Stream {
       }
 
       await client.query('COMMIT');
-      
+
       return result.rows[0];
     } catch (error) {
       await client.query('ROLLBACK');

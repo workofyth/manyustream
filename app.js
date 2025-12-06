@@ -2539,6 +2539,28 @@ const server = app.listen(port, '0.0.0.0', async () => {
   } catch (error) {
     console.error('Failed to sync stream statuses:', error);
   }
+
+  // Check for scheduled streams that should start immediately
+  try {
+    const now = new Date();
+    const scheduledStreams = await Stream.findAll(null, 'scheduled');
+    for (const stream of scheduledStreams) {
+      if (stream.schedule_time) {
+        const scheduleTime = new Date(stream.schedule_time);
+        if (scheduleTime <= now) {
+          console.log(`Found scheduled stream that should start now: ${stream.id} - ${stream.title}`);
+          const result = await streamingService.startStream(stream.id);
+          if (result.success) {
+            console.log(`Successfully started overdue scheduled stream on app start: ${stream.id}`);
+          } else {
+            console.error(`Failed to start overdue scheduled stream on app start ${stream.id}: ${result.error}`);
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error checking for scheduled streams on app start:', error);
+  }
 });
 
 server.timeout = 30 * 60 * 1000;

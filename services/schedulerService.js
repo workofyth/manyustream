@@ -43,6 +43,23 @@ async function checkScheduledStreams() {
         }
       }
     }
+
+    // Also check for scheduled streams that should have started already but haven't
+    const scheduledStreams = await Stream.findAll(null, 'scheduled');
+    for (const stream of scheduledStreams) {
+      if (stream.schedule_time) {
+        const scheduleTime = new Date(stream.schedule_time);
+        if (scheduleTime <= now) {
+          console.log(`Found scheduled stream that should have started: ${stream.id} - ${stream.title}`);
+          const result = await streamingService.startStream(stream.id);
+          if (result.success) {
+            console.log(`Successfully started overdue scheduled stream: ${stream.id}`);
+          } else {
+            console.error(`Failed to start overdue scheduled stream ${stream.id}: ${result.error}`);
+          }
+        }
+      }
+    }
   } catch (error) {
     console.error('Error checking scheduled streams:', error);
   }

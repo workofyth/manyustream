@@ -22,6 +22,60 @@ const streamRetryCount = new Map();
 const MAX_RETRY_ATTEMPTS = 3;
 const manuallyStoppingStreams = new Set();
 const MAX_LOG_LINES = 100;
+
+function formatResolution(resolution) {
+  // Common resolution patterns
+  const commonResolutions = {
+    '720': '1280x720',
+    '480': '854x480',
+    '360': '640x360',
+    '1080': '1920x1080',
+    '4k': '3840x2160',
+    '2160': '3840x2160',
+    '1440': '2560x1440'
+  };
+
+  if (typeof resolution !== 'string') {
+    return '1280x720'; // default
+  }
+
+  // Check if it's a common resolution format like "720" or "1080"
+  if (commonResolutions[resolution.toLowerCase()]) {
+    return commonResolutions[resolution.toLowerCase()];
+  }
+
+  // If it's already in the format "WIDTHxHEIGHT", validate it
+  const resolutionRegex = /^(\d+)x(\d+)$|^(hd|fhd|uhd|4k)$/;
+  if (resolutionRegex.test(resolution.toLowerCase())) {
+    return resolution.toLowerCase() === 'hd' ? '1280x720' :
+           resolution.toLowerCase() === 'fhd' ? '1920x1080' :
+           resolution.toLowerCase() === 'uhd' ? '3840x2160' :
+           resolution.toLowerCase() === '4k' ? '3840x2160' : resolution;
+  }
+
+  // If it's just a number followed by p, convert to standard format
+  const heightRegex = /^(\d+)p?$/;
+  const match = resolution.match(heightRegex);
+  if (match) {
+    const height = parseInt(match[1]);
+    switch(height) {
+      case 360: return '640x360';
+      case 480: return '854x480';
+      case 720: return '1280x720';
+      case 1080: return '1920x1080';
+      case 1440: return '2560x1440';
+      case 2160: return '3840x2160';
+      default:
+        // For other heights, calculate width based on 16:9 aspect ratio
+        const width = Math.round(height * 16 / 9);
+        return `${width}x${height}`;
+    }
+  }
+
+  // If none of the above, return default
+  return '1280x720';
+}
+
 function addStreamLog(streamId, message) {
   if (!streamLogs.has(streamId)) {
     streamLogs.set(streamId, []);
@@ -108,14 +162,17 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
     ];
   }
   
-  const resolution = stream.resolution || '1280x720';
+  let resolution = stream.resolution || '1280x720';
+  // Validate and format resolution properly
+  resolution = formatResolution(resolution);
+
   const bitrate = stream.bitrate || 2500;
   const fps = stream.fps || 30;
-  
+
   // YouTube requires keyframe interval <= 4 seconds
   // GOP size = fps * seconds, so for 30fps: 30 * 2 = 60 frames (2 seconds is optimal)
   const gopSize = fps * 2; // 2 seconds GOP for better compatibility
-  
+
   return [
     '-hwaccel', 'auto',
     '-loglevel', 'error',
@@ -241,14 +298,17 @@ async function buildFFmpegArgs(stream) {
       rtmpUrl
     ];
   }
-  const resolution = stream.resolution || '1280x720';
+  let resolution = stream.resolution || '1280x720';
+  // Validate and format resolution properly
+  resolution = formatResolution(resolution);
+
   const bitrate = stream.bitrate || 2500;
   const fps = stream.fps || 30;
-  
+
   // YouTube requires keyframe interval <= 4 seconds
   // GOP size = fps * seconds, so for 30fps: 30 * 2 = 60 frames (2 seconds is optimal)
   const gopSize = fps * 2; // 2 seconds GOP for better compatibility
-  
+
   return [
     '-hwaccel', 'auto',
     '-loglevel', 'error',
